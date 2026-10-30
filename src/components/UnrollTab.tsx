@@ -40,7 +40,7 @@ export function UnrollTab({ fabrication, view, onView }: { fabrication: Fabricat
       <fieldset className="group">
         <legend>溶接</legend>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <span>継ぎ目の位置</span>
+          <span>継ぎ目の位置（3D では赤線）</span>
           <label className="flex items-center gap-1">
             <input type="radio" checked={settings.seam === 'inner'} onChange={() => setFab({ seam: 'inner' })} /> 曲げの内側
           </label>

@@ -8,7 +8,7 @@ import type { Fabrication } from '../geometry/fabrication'
 import { parallelTransportFrames, type Frame } from '../geometry/frames'
 import { diameterAt, type Profile, type Station } from '../geometry/profile'
 import { buildTubeMesh } from '../geometry/tubeMesh'
-import { add, distance, scale, type Vec3 } from '../geometry/vec3'
+import { add, distance, dot, normalize, scale, sub, type Vec3 } from '../geometry/vec3'
 import { useDesignStore } from '../store/designStore'
 
 interface Props {
@@ -228,6 +228,21 @@ function FabPieces({ fabrication }: { fabrication: Fabrication }) {
     [fabrication],
   )
   useEffect(() => () => geoms.forEach((g) => g.dispose()), [geoms])
+
+  // 展開図の両端（丸めたときの縦の合わせ目）は各切断線の先頭の点を結ぶ母線。表面に埋もれないよう少し外へ出す
+  const seams = useMemo(
+    () =>
+      fabrication.unrolled.map((u, i) => {
+        const p = fabrication.fab.pieces[i]
+        return [u.edge0_3d[0], u.edge1_3d[0]].map((x) => {
+          const rel = sub(x, p.start)
+          const radial = normalize(sub(rel, scale(p.dir, dot(rel, p.dir))))
+          return add(x, scale(radial, 1.5))
+        })
+      }),
+    [fabrication],
+  )
+
   return (
     <>
       {geoms.map((g, i) => (
@@ -237,6 +252,9 @@ function FabPieces({ fabrication }: { fabrication: Fabrication }) {
       ))}
       {fabrication.unrolled.map((u, i) => (
         <Line key={`e${i}`} points={u.edge1_3d as [number, number, number][]} color="#111827" lineWidth={1.5} />
+      ))}
+      {seams.map((pts, i) => (
+        <Line key={`s${i}`} points={pts as [number, number, number][]} color="#e00000" lineWidth={4} />
       ))}
     </>
   )
