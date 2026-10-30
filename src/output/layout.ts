@@ -81,12 +81,46 @@ export function pieceDrawing(u: UnrolledPiece, fab: FabPiece, count: number): { 
     `OD ${fab.d0Outer.toFixed(1)} > ${fab.d1Outer.toFixed(1)}`,
     `gen ${u.generatorMin.toFixed(1)}-${u.generatorMax.toFixed(1)}`,
   ]
-  const size = Math.min(4, Math.max(2.2, (mid0[1] - mid1[1]) / 9))
+  // 大きな丸数字（円 + 番号）を中央に置く。高さに余裕があれば寸法の文字を下に、なければ右に並べる
+  const band = mid0[1] - mid1[1]
+  const longest = Math.max(...lines.map((t) => t.length))
+  let r = Math.min(14, Math.max(5, band * 0.2))
+  let size = Math.min(3.2, Math.max(2.2, band / 12))
+  let ccx = cx
+  let ccy: number
+  let textX: number
+  let textTop: number
+  let anchor: TextItem['anchor']
+  let right: number
+  const stackH = 2 * r + 3 + lines.length * size * 1.35
+  if (stackH <= band * 0.85) {
+    const top = cy - stackH / 2
+    ccy = top + r
+    textX = cx
+    textTop = top + 2 * r + 3
+    anchor = 'middle'
+    right = cx + Math.max(r, longest * size * 0.28)
+  } else {
+    r = Math.min(14, Math.max(3, band * 0.4))
+    size = Math.min(size, (band * 0.85) / (lines.length * 1.35))
+    const totalW = 2 * r + 4 + longest * size * 0.56
+    ccx = cx - totalW / 2 + r
+    ccy = cy
+    textX = ccx + r + 4
+    textTop = cy - (lines.length * size * 1.35) / 2
+    anchor = 'start'
+    right = cx + totalW / 2
+  }
+  const circle: Pt[] = []
+  for (let i = 0; i < 48; i++) circle.push([ccx + r * Math.cos((2 * Math.PI * i) / 48), ccy + r * Math.sin((2 * Math.PI * i) / 48)])
+  items.push({ kind: 'line', pts: circle, closed: true, width: 0.6, layer: 'info' })
+  const numSize = r * (no >= 10 ? 1.0 : 1.3)
+  items.push({ kind: 'text', x: ccx, y: ccy + numSize * 0.36, text: String(no), size: numSize, anchor: 'middle', layer: 'info' })
   lines.forEach((t, i) => {
-    items.push({ kind: 'text', x: cx, y: cy + (i - lines.length / 2 + 0.8) * size * 1.35, text: t, size: i === 0 ? size * 1.3 : size, anchor: 'middle', layer: 'info' })
+    items.push({ kind: 'text', x: textX, y: textTop + (i + 0.8) * size * 1.35, text: t, size, anchor, layer: 'info' })
   })
   // 流れ方向（排気側）を示す矢印。y が小さい方向が排気側
-  const ax = cx + Math.min(30, (mid0[1] - mid1[1]) * 0.15) + 18
+  const ax = right + 6
   const ay0 = cy + 6
   const ay1 = cy - 6
   items.push({ kind: 'line', pts: [[ax, ay0], [ax, ay1]], width: MARK_W, layer: 'info' })

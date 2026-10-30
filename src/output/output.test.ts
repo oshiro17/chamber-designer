@@ -103,6 +103,18 @@ describe('用紙ぎりぎりの部品', () => {
   })
 })
 
+describe('pieceDrawing', () => {
+  it('各部品の中央に、他の文字より大きい部品番号と丸がある', () => {
+    drawings.forEach((d, i) => {
+      const texts = d.items.filter((it) => it.kind === 'text')
+      const num = texts.find((t) => t.kind === 'text' && t.text === String(i + 1))
+      expect(num).toBeDefined()
+      for (const t of texts) if (t !== num && t.kind === 'text') expect(num!.kind === 'text' && num!.size).toBeGreaterThan(t.size)
+      expect(d.items.some((it) => it.kind === 'line' && it.closed && it.layer === 'info' && it.pts.length === 48)).toBe(true)
+    })
+  })
+})
+
 describe('clipItems', () => {
   it('矩形をまたぐ線分を境界で切る', () => {
     const out = clipItems([{ kind: 'line', pts: [[-10, 5], [20, 5]], width: 1, layer: 'cut' }], 0, 0, 10, 10)
