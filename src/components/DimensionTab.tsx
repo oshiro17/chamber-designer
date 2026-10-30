@@ -48,7 +48,7 @@ export function DimensionTab() {
                   <td className="text-center">{i + 1}</td>
                   <td>
                     {i === 0 ? (
-                      <span className="block pr-1 text-right">0（開始）</span>
+                      <span className="block pr-1 text-right">0</span>
                     ) : (
                       <NumberField
                         value={p.distance}
