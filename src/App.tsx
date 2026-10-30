@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { BendTab } from './components/BendTab'
 import { DimensionTab } from './components/DimensionTab'
+import { Library } from './components/Library'
 import { PatternView } from './components/PatternView'
 import { PagePreview, PrintTab } from './components/PrintTab'
 import { UnrollTab } from './components/UnrollTab'
@@ -54,7 +55,10 @@ export default function App() {
   return (
     <DerivedContext.Provider value={derived}>
       <div className="flex h-dvh flex-col">
-        <div className="titlebar">大城チャンバーデザイン</div>
+        <div className="titlebar flex items-center justify-between">
+          <span>大城チャンバーデザイン</span>
+          <Library />
+        </div>
 
         <div className="flex border-b border-[#ddd] px-2">
           {TABS.map((t) => (

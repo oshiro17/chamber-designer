@@ -28,6 +28,7 @@ interface State {
   setDiameterKind: (kind: DiameterKind) => void
   setThickness: (t: number) => void
   clearAll: () => void
+  loadDesign: (d: Design, name: string) => void
 
   startBend: () => void
   pickS: (s: number) => void
@@ -124,6 +125,7 @@ export const useDesignStore = create<State>((set, get) => {
       edit((d) => ({ ...d, thickness }))
     },
     clearAll: () => set({ design: defaultDesign(), draft: null, message: 'すべてクリアしました' }),
+    loadDesign: (design, name) => set({ design, draft: null, message: `「${name}」を開きました` }),
 
     startBend: () => set({ draft: { step: 'pick', s: null }, message: '曲げたい位置の中心をタップしてください' }),
     pickS: (s) => {
