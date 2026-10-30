@@ -54,7 +54,7 @@ export default function App() {
   return (
     <DerivedContext.Provider value={derived}>
       <div className="flex h-dvh flex-col">
-        <div className="titlebar">Chamber Designer</div>
+        <div className="titlebar">チャンバーデザイナー</div>
 
         <div className="flex border-b border-[#ddd] px-2">
           {TABS.map((t) => (
