@@ -25,7 +25,7 @@ export function defaultDesign(): Design {
     diameterKind: 'outer',
     thickness: 1,
     bends: [],
-    fabrication: { mode: 'auto', maxAngleDeg: 12, count: 12, seam: 'inner', allowance: 0 },
+    fabrication: { mode: 'auto', maxAngleDeg: 12, count: 12, seam: 180, allowance: 0 },
     print: { orientation: 'landscape', margin: 10, overlap: 15 },
   }
 }
@@ -33,6 +33,12 @@ export function defaultDesign(): Design {
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 /** 未入力（NaN）は JSON で null になるため NaN に戻す */
 const numOrBlank = (v: unknown): number | null => (v === null ? NaN : isNum(v) ? v : null)
+
+/** 以前の保存データの溶接線（'inner' / 'outer'）は角度の初期値に置き換える */
+function fabricationOf(base: Design, raw: unknown): Design['fabrication'] {
+  const f = { ...base.fabrication, ...(raw as object) }
+  return { ...f, seam: isNum(f.seam) ? f.seam : base.fabrication.seam }
+}
 
 /** 保存データを読み込む。型が合わない項目があれば理由付きで失敗させる */
 export function parseDesign(raw: unknown): { ok: true; design: Design } | { ok: false; error: string } {
@@ -61,7 +67,7 @@ export function parseDesign(raw: unknown): { ok: true; design: Design } | { ok: 
       diameterKind: d.diameterKind === 'inner' ? 'inner' : 'outer',
       thickness: isNum(d.thickness) ? d.thickness : base.thickness,
       bends,
-      fabrication: { ...base.fabrication, ...(d.fabrication as object) },
+      fabrication: fabricationOf(base, d.fabrication),
       print: { ...base.print, ...(d.print as object) },
     },
   }

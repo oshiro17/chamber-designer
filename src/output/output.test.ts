@@ -14,7 +14,7 @@ const prof = computeProfile(SAMPLE_POINTS.map((p, i) => ({ id: String(i), ...p }
 if (!prof.ok) throw new Error()
 const { stations, length: L } = prof.profile
 const c = buildBentCenterline(L, [{ id: 'a', s: 690, width: 250, a: 0.9, b: 0.2 }])
-const fabr = computeFabrication(c, stations, { mode: 'auto', maxAngleDeg: 12, count: 0, seam: 'inner', allowance: 0 })
+const fabr = computeFabrication(c, stations, { mode: 'auto', maxAngleDeg: 12, count: 0, seam: 180, allowance: 0 })
 const drawings = fabr.unrolled.map((u, i) => pieceDrawing(u, fabr.fab.pieces[i], fabr.unrolled.length))
 const land: PrintSettings = { orientation: 'landscape', margin: 10, overlap: 15 }
 
@@ -78,7 +78,7 @@ describe('layoutPages', () => {
       index: 0, s0: 0, s1: 600, length: 600, start: [0, 0, 0], dir: [1, 0, 0], u: [0, 1, 0], v: [0, 0, 1],
       r0: 150, r1: 150, d0Outer: 301, d1Outer: 301, n0: [1, 0, 0], n1: [1, 0, 0],
     }
-    const u = unrollPiece(big, { seam: 'inner', allowance: 0 })
+    const u = unrollPiece(big, { seam: 180, allowance: 0 })
     if (!u.ok) throw new Error()
     const d = pieceDrawing(u.piece, big, 1)
     const tiles = layoutPages([d], land)
@@ -96,7 +96,7 @@ describe('用紙ぎりぎりの部品', () => {
       index: 0, s0: 0, s1: 150, length: 150, start: [0, 0, 0], dir: [1, 0, 0], u: [0, 1, 0], v: [0, 0, 1],
       r0: r, r1: r, d0Outer: 2 * r + 1, d1Outer: 2 * r + 1, n0: [1, 0, 0], n1: [1, 0, 0],
     }
-    const u = unrollPiece(p, { seam: 'inner', allowance: 0 })
+    const u = unrollPiece(p, { seam: 180, allowance: 0 })
     if (!u.ok) throw new Error()
     const pages = layoutPages([pieceDrawing(u.piece, p, 1)], land)
     expect(pages).toHaveLength(1)

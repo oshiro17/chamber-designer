@@ -132,6 +132,11 @@ describe('保存データ', () => {
     const r = parseDesign(JSON.parse(JSON.stringify(defaultDesign())))
     expect(r.ok && r.design.points[0].diameter).toBeNaN()
   })
+  it('以前の溶接線の設定（inner / outer）は角度の初期値（下 = 180°）として読み込む', () => {
+    const old = { ...JSON.parse(JSON.stringify(defaultDesign())), fabrication: { mode: 'auto', maxAngleDeg: 12, count: 12, seam: 'inner', allowance: 0 } }
+    const r = parseDesign(old)
+    expect(r.ok && r.design.fabrication.seam).toBe(180)
+  })
   it('壊れたデータは理由付きで拒否する', () => {
     expect(parseDesign({ version: 1, points: [{ distance: 'x', diameter: 1 }, { distance: 1, diameter: 1 }] }).ok).toBe(false)
     expect(parseDesign({ version: 2 }).ok).toBe(false)

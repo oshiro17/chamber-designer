@@ -6,8 +6,12 @@ export type Pt = [number, number]
 export interface UnrollOptions {
   /** 円周方向の分割数 */
   samples?: number
-  /** 溶接線（展開図の継ぎ目）を置く位置 */
-  seam: 'inner' | 'outer'
+  /**
+   * 溶接線（丸めたときの縦の合わせ目）を置く角度 [deg]。部品の基準向き u から v 側へ測る。
+   * u, v は隣の部品へねじれずに受け渡しているため、全部品で同じ角度にすると溶接線が一本につながる。
+   * 入口では 0° が上、90° が手前、180° が下、270° が奥。
+   */
+  seam: number
   /** 継ぎ目に付ける溶接用の余白 [mm]。0 なら突き合わせ溶接 */
   allowance: number
 }
@@ -73,19 +77,13 @@ export function unrollPiece(p: FabPiece, opts: UnrollOptions): UnrollResult {
     return { e, t0, t1 }
   }
 
-  let seamPhi = 0
-  let best = opts.seam === 'inner' ? Infinity : -Infinity
   const M = 720
   for (let j = 0; j < M; j++) {
-    const phi = (2 * Math.PI * j) / M
-    const q = params(phi)
-    if (!q) return { ok: false, error: `部品 ${p.index + 1}: 切断面が部品の軸とほぼ平行になり、展開できません。分割数を増やしてください` }
-    const g = q.t1 - q.t0
-    if (opts.seam === 'inner' ? g < best : g > best) {
-      best = g
-      seamPhi = phi
+    if (!params((2 * Math.PI * j) / M)) {
+      return { ok: false, error: `部品 ${p.index + 1}: 切断面が部品の軸とほぼ平行になり、展開できません。分割数を増やしてください` }
     }
   }
+  const seamPhi = (((opts.seam * Math.PI) / 180) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI)
 
   const ta = isCyl ? 0 : -p.r0 / k
   const slant = Math.sqrt(1 + k * k)

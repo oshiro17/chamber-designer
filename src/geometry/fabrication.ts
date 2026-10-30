@@ -4,7 +4,8 @@ import { buildPieces, planCuts, type FabResult, type SegmentationSettings } from
 import { jointMismatch, unrollPiece, type UnrolledPiece } from './unroll'
 
 export interface FabricationSettings extends SegmentationSettings {
-  seam: 'inner' | 'outer'
+  /** 溶接線の角度 [deg]（0 = 上, 90 = 手前, 180 = 下, 270 = 奥） */
+  seam: number
   allowance: number
 }
 

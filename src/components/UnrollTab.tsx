@@ -2,6 +2,13 @@ import { SHORT_PIECE, type Fabrication } from '../geometry/fabrication'
 import { useDesignStore } from '../store/designStore'
 import { NumberField } from './NumberField'
 
+const SEAM_DIRS = [
+  { deg: 0, label: '上' },
+  { deg: 90, label: '手前' },
+  { deg: 180, label: '下' },
+  { deg: 270, label: '奥' },
+]
+
 export function UnrollTab({ fabrication, view, onView }: { fabrication: Fabrication | null; view: 'pattern' | '3d'; onView: (v: 'pattern' | '3d') => void }) {
   const settings = useDesignStore((s) => s.design.fabrication)
   const setFab = useDesignStore((s) => s.setFabrication)
@@ -39,18 +46,20 @@ export function UnrollTab({ fabrication, view, onView }: { fabrication: Fabricat
 
       <fieldset className="group">
         <legend>溶接</legend>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <span>継ぎ目の位置（3D では赤線）</span>
+        <p>溶接線の位置（全部品で一直線になります。3D では赤線）</p>
+        <div className="mt-1 flex flex-wrap gap-1">
+          {SEAM_DIRS.map((d) => (
+            <button key={d.deg} className={`btn ${settings.seam === d.deg ? 'on' : ''}`} onClick={() => setFab({ seam: d.deg })}>
+              {d.label}
+            </button>
+          ))}
           <label className="flex items-center gap-1">
-            <input type="radio" checked={settings.seam === 'inner'} onChange={() => setFab({ seam: 'inner' })} /> 曲げの内側
-          </label>
-          <label className="flex items-center gap-1">
-            <input type="radio" checked={settings.seam === 'outer'} onChange={() => setFab({ seam: 'outer' })} /> 曲げの外側
-          </label>
-          <label className="flex items-center gap-1">
-            溶接用の余白 <NumberField value={settings.allowance} min={0} onChange={(v) => setFab({ allowance: Math.min(Math.max(v, 0), 20) })} className="w-16" label="余白" /> mm
+            <NumberField value={settings.seam} onChange={(v) => Number.isFinite(v) && setFab({ seam: ((v % 360) + 360) % 360 })} className="w-16" label="溶接線の角度" />°
           </label>
         </div>
+        <label className="mt-2 flex items-center gap-1">
+          溶接用の余白 <NumberField value={settings.allowance} min={0} onChange={(v) => setFab({ allowance: Math.min(Math.max(v, 0), 20) })} className="w-16" label="余白" /> mm
+        </label>
       </fieldset>
 
       <fieldset className="group">
