@@ -74,6 +74,18 @@ describe('曲げの 3 手順', () => {
     expect(measuredLength(buildBentCenterline(1025, S().design.bends))).toBeCloseTo(1025, 6)
   })
 
+  it('位置は入口からの mm で入力でき、範囲外は入口〜出口に収め、空欄は未選択に戻す', () => {
+    S().startBend()
+    S().pickS(250)
+    expect(S().draft).toEqual({ step: 'pick', s: 250 })
+    S().pickS(5000)
+    expect(S().draft).toEqual({ step: 'pick', s: 1025 })
+    S().pickS(-30)
+    expect(S().draft).toEqual({ step: 'pick', s: 0 })
+    S().pickS(NaN)
+    expect(S().draft).toEqual({ step: 'pick', s: null })
+  })
+
   it('位置を選ぶまでは決定できない', () => {
     S().startBend()
     S().confirmPick()

@@ -14,7 +14,7 @@ const DIRS = [
 export function BendTab() {
   const design = useDesignStore((s) => s.design)
   const draft = useDesignStore((s) => s.draft)
-  const { startBend, confirmPick, setPhi, confirmDir, setAmount, confirmAmount, cancelBend, removeBend, removeAllBends } = useDesignStore.getState()
+  const { startBend, pickS, confirmPick, setPhi, confirmDir, setAmount, confirmAmount, cancelBend, removeBend, removeAllBends } = useDesignStore.getState()
   const { profile, check } = useDerived()
   if (!profile || !check) return <p>寸法にエラーがあるため曲げられません。</p>
 
@@ -34,8 +34,18 @@ export function BendTab() {
           <legend>曲げを追加（手順 {draft.step === 'pick' ? 1 : draft.step === 'dir' ? 2 : 3} / 3）</legend>
           {draft.step === 'pick' && (
             <>
-              <p>3D 画面で、曲げたい位置の中心をタップしてください。</p>
-              <p className="mt-1 font-mono">位置 s = {draft.s === null ? '未選択' : `${draft.s.toFixed(0)} mm`}</p>
+              <p>曲げたい位置の中心を、入口（0mm）からの距離で入力するか、3D 画面でタップしてください。</p>
+              <div className="mt-2 flex items-center gap-1">
+                <span>入口から</span>
+                <button className="btn !px-2" disabled={draft.s === null} onClick={() => draft.s !== null && pickS(draft.s - 10)}>
+                  −10
+                </button>
+                <NumberField value={draft.s === null ? NaN : Math.round(draft.s * 10) / 10} onChange={pickS} min={0} className="w-20" label="曲げ位置" autoFocus />
+                <button className="btn !px-2" disabled={draft.s === null} onClick={() => draft.s !== null && pickS(draft.s + 10)}>
+                  ＋10
+                </button>
+                <span>mm（全長 {profile.length.toFixed(0)}）</span>
+              </div>
               <div className="mt-2 flex gap-2">
                 <button className="btn primary" disabled={draft.s === null} onClick={confirmPick}>
                   決定

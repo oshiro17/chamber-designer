@@ -136,7 +136,15 @@ export const useDesignStore = create<State>((set, get) => {
     startBend: () => set({ draft: { step: 'pick', s: null }, message: '曲げたい位置の中心をタップしてください' }),
     pickS: (s) => {
       const dr = get().draft
-      if (dr?.step === 'pick') set({ draft: { step: 'pick', s }, message: `位置 s = ${s.toFixed(0)}mm を選びました。よければ［決定］` })
+      if (dr?.step !== 'pick') return
+      // 数値入力の未入力（NaN）は未選択に戻し、範囲外は入口〜出口に収める
+      if (!Number.isFinite(s)) {
+        set({ draft: { step: 'pick', s: null } })
+        return
+      }
+      const pr = profileOf(get().design)
+      const v = pr.ok ? Math.min(Math.max(s, 0), pr.profile.length) : s
+      set({ draft: { step: 'pick', s: v }, message: `位置 s = ${v.toFixed(0)}mm を選びました。よければ［決定］` })
     },
     confirmPick: () => {
       const dr = get().draft
