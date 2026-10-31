@@ -6,7 +6,7 @@ import { computeProfile } from '../geometry/profile'
 import { SAMPLE_POINTS } from '../geometry/sample'
 import type { FabPiece } from '../geometry/segmentation'
 import { unrollPiece } from '../geometry/unroll'
-import { clipItems, layoutPages, mmToPt, pieceDrawing, type LineItem, type PrintSettings } from './layout'
+import { clipItems, layoutPages, mmToPt, pieceDrawing, rotateDrawing, type LineItem, type PrintSettings } from './layout'
 import { pagesToPdf } from './pdf'
 import { pageToSvg } from './svg'
 
@@ -38,8 +38,9 @@ describe('mm → pt', () => {
 describe('layoutPages', () => {
   const pages = layoutPages(drawings, land)
 
-  it('A3 横は 420 × 297mm', () => {
-    for (const p of pages) expect([p.width, p.height]).toEqual([420, 297])
+  it('A3 横は 420 × 297mm（横で入らない部品のページだけ縦になる）', () => {
+    for (const p of pages) expect([[420, 297], [297, 420]]).toContainEqual([p.width, p.height])
+    expect(pages[0].width).toBe(420)
     const portrait = layoutPages(drawings, { ...land, orientation: 'portrait' })
     expect([portrait[0].width, portrait[0].height]).toEqual([297, 420])
   })
@@ -59,9 +60,9 @@ describe('layoutPages', () => {
         if (it.kind !== 'line' || it.layer !== 'cut') continue
         for (const [x, y] of it.pts) {
           expect(x).toBeGreaterThanOrEqual(10 - 1e-9)
-          expect(x).toBeLessThanOrEqual(410 + 1e-9)
+          expect(x).toBeLessThanOrEqual(p.width - 10 + 1e-9)
           expect(y).toBeGreaterThanOrEqual(10 - 1e-9)
-          expect(y).toBeLessThanOrEqual(297 - 10 + 1e-9)
+          expect(y).toBeLessThanOrEqual(p.height - 10 + 1e-9)
         }
       }
     }
@@ -112,6 +113,41 @@ describe('pieceDrawing', () => {
       for (const t of texts) if (t !== num && t.kind === 'text') expect(num!.kind === 'text' && num!.size).toBeGreaterThan(t.size)
       expect(d.items.some((it) => it.kind === 'line' && it.closed && it.layer === 'info' && it.pts.length === 48)).toBe(true)
     })
+  })
+})
+
+describe('A3 への入れ方', () => {
+  const cone = (over: Partial<FabPiece>): FabPiece => ({
+    index: 0, s0: 0, s1: 260, length: 260, start: [0, 0, 0], dir: [1, 0, 0], u: [0, 1, 0], v: [0, 0, 1],
+    r0: 62, r1: 12, d0Outer: 125, d1Outer: 25, n0: [1, 0, 0], n1: [1, 0, 0], ...over,
+  })
+  const draw = (p: FabPiece) => {
+    const u = unrollPiece(p, { seam: 0, allowance: 0 })
+    if (!u.ok) throw new Error()
+    return pieceDrawing(u.piece, p, 1)
+  }
+
+  it('外径 125→25・長さ 260 の円すい部品（以前は 2 ページに分かれていた）は 1 ページに収まる', () => {
+    const pages = layoutPages([draw(cone({}))], land)
+    expect(pages).toHaveLength(1)
+    expect(pages[0].title).not.toContain('tile')
+  })
+
+  it('回転しても切断線の長さは変わらない', () => {
+    const d = draw(cone({}))
+    const r = rotateDrawing(d, 37)
+    expect(segLen(r.items)).toBeCloseTo(segLen(d.items), 6)
+  })
+
+  it('入らない部品は均等に分け、端だけが別ページに切れることはない', () => {
+    // 円周 471mm の円柱。縦横どちらの A3 にも入らず 2 ページに分かれる
+    const r = 471 / (2 * Math.PI)
+    const d = draw(cone({ r0: r, r1: r, length: 200, s1: 200, d0Outer: 2 * r + 1, d1Outer: 2 * r + 1 }))
+    const pages = layoutPages([d], land)
+    expect(pages).toHaveLength(2)
+    const lens = pages.map((p) => segLen(p.items))
+    expect(Math.min(...lens) / Math.max(...lens)).toBeGreaterThan(0.8)
+    expect(lens[0] + lens[1]).toBeGreaterThanOrEqual(segLen(d.items) - 1e-6)
   })
 })
 

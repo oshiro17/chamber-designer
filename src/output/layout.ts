@@ -214,33 +214,115 @@ function footer(width: number, height: number, margin: number, label: string): D
   return items
 }
 
-interface Block {
-  piece: number
+interface Drawing {
   items: DrawItem[]
   w: number
   h: number
+}
+
+/** 図形を原点まわりに回して、左上が (0, 0) に来るよう平行移動する。文字は向きを変えず位置だけ回す */
+export function rotateDrawing(d: Drawing, deg: number): Drawing {
+  if (deg === 0) return d
+  const a = (deg * Math.PI) / 180
+  const c = Math.cos(a)
+  const sn = Math.sin(a)
+  const rot = ([x, y]: Pt): Pt => [x * c - y * sn, x * sn + y * c]
+  const items = d.items.map((it) => (it.kind === 'text' ? { ...it, ...xy(rot([it.x, it.y])) } : { ...it, pts: it.pts.map(rot) }))
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const it of items) {
+    if (it.kind !== 'line') continue
+    for (const [x, y] of it.pts) {
+      minX = Math.min(minX, x)
+      minY = Math.min(minY, y)
+      maxX = Math.max(maxX, x)
+      maxY = Math.max(maxY, y)
+    }
+  }
+  return { items: translate(items, -minX, -minY), w: maxX - minX, h: maxY - minY }
+}
+const xy = ([x, y]: Pt) => ({ x, y })
+
+/** 試す回転角。まずはそのまま、次に 90°、それでも入らなければ 3° 刻みで探す */
+const ANGLES = [0, 90, ...Array.from({ length: 59 }, (_, i) => 3 * (i + 1)).filter((a) => a !== 90)]
+
+function fitAngle(d: Drawing, W: number, H: number, pad = MIN_PAD): Drawing | null {
+  for (const a of ANGLES) {
+    const r = rotateDrawing(d, a)
+    if (r.w + 2 * pad <= W && r.h + 2 * pad <= H) return r
+  }
+  return null
+}
+
+interface Block extends Drawing {
+  piece: number
   /** 周囲の余白。用紙ぎりぎりの部品は余白を詰めて 1 ページに収める */
   pad: number
 }
 
 const MIN_PAD = 1
 
+/** n 枚に均等に分けたときの各ページの開始位置。1 枚なら中央にそろえる */
+function evenStarts(total: number, size: number, overlap: number): number[] {
+  if (total <= size) return [(total - size) / 2]
+  const n = Math.ceil((total - overlap) / (size - overlap))
+  const step = (total - size) / (n - 1)
+  return Array.from({ length: n }, (_, i) => i * step)
+}
+
 /**
- * 部品をA3ページへ割り付ける。収まる部品は棚詰めでまとめ、収まらない部品は重なり幅付きでタイル分割する。
- * タイルの重なり部分には、両方のページに同じ位置で印刷される合わせマーク（+）を置く。
+ * 部品をA3ページへ割り付ける。
+ * 1. 下の帯（ページ情報と物差し）にかからずに入る部品は、棚詰めでまとめる（入らなければ回転も試す）
+ * 2. 下の帯に重なれば入る部品は、1 ページに 1 部品で置く
+ * 3. 指定の向きで入らなければ、そのページだけ縦横を入れ替えて 1 ページに収める
+ * 4. それでも入らない部品は、ページ数で均等に分けて重なり幅を付け、重なり部分に合わせマーク（+）を置く
  */
-export function layoutPages(drawings: { items: DrawItem[]; w: number; h: number }[], s: PrintSettings): Page[] {
+export function layoutPages(drawings: Drawing[], s: PrintSettings): Page[] {
   const { width, height } = pageSize(s)
   const W = width - 2 * s.margin
   const H = height - 2 * s.margin - FOOTER
-  const pages: { items: DrawItem[]; title: string }[] = []
+  const Hfull = height - 2 * s.margin
+  const m = s.margin
+  const alt: PrintSettings = { ...s, orientation: s.orientation === 'landscape' ? 'portrait' : 'landscape' }
+  const altSize = pageSize(alt)
+  const pages: { items: DrawItem[]; title: string; turned?: boolean }[] = []
   const fits: Block[] = []
   const big: Block[] = []
-  drawings.forEach((d, i) => {
-    const pad = Math.max(MIN_PAD, Math.min(PAD, (W - d.w) / 2, (H - d.h) / 2))
-    const b = { piece: i, items: d.items, w: d.w, h: d.h, pad }
-    if (d.w + 2 * MIN_PAD <= W && d.h + 2 * MIN_PAD <= H) fits.push(b)
-    else big.push({ ...b, pad: PAD })
+  const single = (b: Drawing, i: number, pw: number, ph: number, turned: boolean) => {
+    const w = pw - 2 * m
+    const h = ph - 2 * m
+    pages.push({ items: translate(b.items, m + (w - b.w) / 2, m + (h - b.h) / 2), title: `PART ${i + 1}`, turned })
+  }
+  drawings.forEach((d0, i) => {
+    const a = fitAngle(d0, W, H)
+    if (a) {
+      fits.push({ ...a, piece: i, pad: Math.max(MIN_PAD, Math.min(PAD, (W - a.w) / 2, (H - a.h) / 2)) })
+      return
+    }
+    const b = fitAngle(d0, W, Hfull, 0)
+    if (b) {
+      single(b, i, width, height, false)
+      return
+    }
+    const c = fitAngle(d0, altSize.width - 2 * m, altSize.height - 2 * m, 0)
+    if (c) {
+      single(c, i, altSize.width, altSize.height, true)
+      return
+    }
+    // 均等分割のページ数が最も少ない向きを選ぶ
+    let best: Drawing = d0
+    let bestN = Infinity
+    for (const ang of ANGLES) {
+      const r = rotateDrawing(d0, ang)
+      const n = evenStarts(r.w + 2 * PAD, W, s.overlap).length * evenStarts(r.h + 2 * PAD, H, s.overlap).length
+      if (n < bestN) {
+        best = r
+        bestN = n
+      }
+    }
+    big.push({ ...best, piece: i, pad: PAD })
   })
 
   fits.sort((a, b) => b.h - a.h)
@@ -268,64 +350,70 @@ export function layoutPages(drawings: { items: DrawItem[]; w: number; h: number 
       rowH = 0
     }
     const c = cur as { items: DrawItem[]; parts: number[] }
-    c.items.push(...translate(b.items, s.margin + x + b.pad, s.margin + y + b.pad))
+    c.items.push(...translate(b.items, m + x + b.pad, m + y + b.pad))
     c.parts.push(b.piece)
     x += bw
     rowH = Math.max(rowH, bh)
   }
   flushPage()
 
-  const ov = Math.min(Math.max(s.overlap, 5), Math.min(W, H) / 3)
   for (const b of big) {
     const totalW = b.w + 2 * PAD
     const totalH = b.h + 2 * PAD
-    const cols = totalW <= W ? 1 : Math.ceil((totalW - ov) / (W - ov))
-    const rows = totalH <= H ? 1 : Math.ceil((totalH - ov) / (H - ov))
+    const xs = evenStarts(totalW, W, s.overlap)
+    const ys = evenStarts(totalH, H, s.overlap)
+    const cols = xs.length
+    const rows = ys.length
     const shifted = translate(b.items, PAD, PAD)
     const reg: DrawItem[] = []
     const cross = (cx: number, cy: number) => {
       reg.push({ kind: 'line', pts: [[cx - 4, cy], [cx + 4, cy]], width: 0.2, layer: 'frame' })
       reg.push({ kind: 'line', pts: [[cx, cy - 4], [cx, cy + 4]], width: 0.2, layer: 'frame' })
     }
+    // 重なり部分の中央に、両側のページに同じ位置で印刷される合わせマークを置く
     for (let c = 1; c < cols; c++) {
-      const cx = c * (W - ov) + ov / 2
-      for (let r = 0; r < rows; r++) {
-        const oy = r * (H - ov)
+      const cx = (xs[c] + xs[c - 1] + W) / 2
+      for (const oy of ys) {
         cross(cx, oy + H * 0.25)
         cross(cx, oy + H * 0.75)
       }
     }
     for (let r = 1; r < rows; r++) {
-      const cy = r * (H - ov) + ov / 2
-      for (let c = 0; c < cols; c++) {
-        const ox = c * (W - ov)
+      const cy = (ys[r] + ys[r - 1] + H) / 2
+      for (const ox of xs) {
         cross(ox + W * 0.25, cy)
         cross(ox + W * 0.75, cy)
       }
     }
     const all = [...shifted, ...reg]
+    const ovX = cols > 1 ? W - (xs[1] - xs[0]) : 0
+    const ovY = rows > 1 ? H - (ys[1] - ys[0]) : 0
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const x0 = c * (W - ov)
-        const y0 = r * (H - ov)
-        const items = translate(clipItems(all, x0, y0, x0 + W, y0 + H), s.margin - x0, s.margin - y0)
-        const m = s.margin
-        if (c > 0) items.push({ kind: 'line', pts: [[m + ov, m], [m + ov, m + H]], width: 0.15, dash: [2, 2], layer: 'frame' })
-        if (r > 0) items.push({ kind: 'line', pts: [[m, m + ov], [m + W, m + ov]], width: 0.15, dash: [2, 2], layer: 'frame' })
+        const x0 = xs[c]
+        const y0 = ys[r]
+        const items = translate(clipItems(all, x0, y0, x0 + W, y0 + H), m - x0, m - y0)
+        if (c > 0) items.push({ kind: 'line', pts: [[m + ovX, m], [m + ovX, m + H]], width: 0.15, dash: [2, 2], layer: 'frame' })
+        if (r > 0) items.push({ kind: 'line', pts: [[m, m + ovY], [m + W, m + ovY]], width: 0.15, dash: [2, 2], layer: 'frame' })
         if (c > 0) items.push({ kind: 'text', x: m + 1, y: m + H / 2, text: `< R${r + 1}C${c}`, size: 3, anchor: 'start', layer: 'frame' })
         if (c < cols - 1) items.push({ kind: 'text', x: m + W - 1, y: m + H / 2, text: `R${r + 1}C${c + 2} >`, size: 3, anchor: 'end', layer: 'frame' })
         if (r > 0) items.push({ kind: 'text', x: m + W / 2, y: m + 4, text: `^ R${r}C${c + 1}`, size: 3, anchor: 'middle', layer: 'frame' })
         if (r < rows - 1) items.push({ kind: 'text', x: m + W / 2, y: m + H - 1, text: `v R${r + 2}C${c + 1}`, size: 3, anchor: 'middle', layer: 'frame' })
+        const ov = Math.round(Math.max(ovX, ovY))
         pages.push({ items, title: `PART ${b.piece + 1}  tile R${r + 1}C${c + 1} (${rows}x${cols}, overlap ${ov}mm)` })
       }
     }
   }
 
-  return pages.map((p, i) => ({
-    index: i,
-    width,
-    height,
-    title: p.title,
-    items: [...p.items, ...footer(width, height, s.margin, `${p.title}   page ${i + 1}/${pages.length}   A3 ${s.orientation}`)],
-  }))
+  return pages.map((p, i) => {
+    const sz = p.turned ? altSize : { width, height }
+    const o = p.turned ? alt.orientation : s.orientation
+    return {
+      index: i,
+      width: sz.width,
+      height: sz.height,
+      title: p.title,
+      items: [...p.items, ...footer(sz.width, sz.height, s.margin, `${p.title}   page ${i + 1}/${pages.length}   A3 ${o}`)],
+    }
+  })
 }
