@@ -43,7 +43,12 @@ export function NumberField({ value, onChange, invalid = false, min, disabled, c
         const v = e.target.value.trim() === '' ? NaN : Number(e.target.value)
         if (Number.isNaN(v) || Number.isFinite(v)) onChange(v)
       }}
-      onFocus={(e) => e.target.select()}
+      onFocus={(e) => {
+        e.target.select()
+        // キーボードが出きってから、入力欄を見える範囲の中央へスクロールする
+        const el = e.target
+        setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 350)
+      }}
     />
   )
 }

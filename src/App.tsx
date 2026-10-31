@@ -54,7 +54,7 @@ export default function App() {
 
   return (
     <DerivedContext.Provider value={derived}>
-      <div className="flex h-dvh flex-col">
+      <div className="flex h-[var(--app-h,100dvh)] flex-col">
         <div className="titlebar flex items-center justify-between">
           <span>大城チャンバーデザイン</span>
           <Library />
@@ -69,7 +69,7 @@ export default function App() {
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 p-3 lg:flex-row">
-          <div className="sunken order-1 h-[42dvh] shrink-0 lg:order-2 lg:h-auto lg:min-w-0 lg:flex-1">{view}</div>
+          <div className="sunken order-1 h-[calc(var(--app-h,100dvh)*0.42)] shrink-0 lg:order-2 lg:h-auto lg:min-w-0 lg:flex-1">{view}</div>
           <div className="order-2 min-h-0 flex-1 overflow-y-auto pr-1 lg:order-1 lg:w-[420px] lg:flex-none">
             {panel}
             {errors.length > 0 && (
