@@ -23,6 +23,8 @@ interface State {
   draft: BendDraft | null
   fitNonce: number
   viewDir: ViewDir
+  /** 組み立て演出の開始時刻（performance.now()）。再生していなければ null */
+  assembleAt: number | null
   message: string
 
   addPoint: () => void
@@ -50,6 +52,7 @@ interface State {
   setPrint: (patch: Partial<PrintSettings>) => void
   setTab: (t: Tab) => void
   fit: (dir?: ViewDir) => void
+  playAssemble: () => void
   say: (text: string) => void
 }
 
@@ -88,6 +91,7 @@ export const useDesignStore = create<State>((set, get) => {
     draft: null,
     fitNonce: 0,
     viewDir: 'iso',
+    assembleAt: null,
     message: '',
 
     addPoint: () => {
@@ -192,6 +196,7 @@ export const useDesignStore = create<State>((set, get) => {
     setFabrication: (patch) => edit((d) => ({ ...d, fabrication: { ...d.fabrication, ...patch } })),
     setPrint: (patch) => edit((d) => ({ ...d, print: { ...d.print, ...patch } })),
     setTab: (tab) => set({ tab, draft: null, message: '' }),
+    playAssemble: () => set({ assembleAt: performance.now() }),
     fit: (dir) => set((st) => ({ fitNonce: st.fitNonce + 1, viewDir: dir ?? st.viewDir })),
     say: (message) => set({ message }),
   }

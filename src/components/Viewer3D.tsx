@@ -1,12 +1,13 @@
 import { Environment, Line, OrbitControls } from '@react-three/drei'
-import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
-import { useEffect, useMemo, useRef } from 'react'
+import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { pointAt, type Centerline } from '../geometry/centerline'
 import type { Fabrication } from '../geometry/fabrication'
 import { parallelTransportFrames, type Frame } from '../geometry/frames'
 import { diameterAt, type Profile, type Station } from '../geometry/profile'
+import { rollData, rolledPositions } from '../geometry/rolling'
 import { buildTubeMesh } from '../geometry/tubeMesh'
 import { add, distance, dot, normalize, scale, sub, type Vec3 } from '../geometry/vec3'
 import { useDesignStore, type ViewDir } from '../store/designStore'
@@ -233,21 +234,59 @@ function DirectionArrow({ centerline, frames, profile, s, phiDeg }: { centerline
 
 const PIECE_COLORS = ['#f59e0b', '#38bdf8']
 
+const ROLL_TIME = 900
+const ROLL_GAP = 350
+const ease = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x))
+
 function FabPieces({ fabrication }: { fabrication: Fabrication }) {
-  const geoms = useMemo(
+  const assembleAt = useDesignStore((s) => s.assembleAt)
+  const pieces = useMemo(
     () =>
-      fabrication.unrolled.map((u) => {
+      fabrication.unrolled.map((u, i) => {
         const n = u.edge0_3d.length
         const pos = new Float32Array(n * 2 * 3)
-        u.edge0_3d.forEach((p, i) => pos.set(p, i * 6))
-        u.edge1_3d.forEach((p, i) => pos.set(p, i * 6 + 3))
+        u.edge0_3d.forEach((p, j) => pos.set(p, j * 6))
+        u.edge1_3d.forEach((p, j) => pos.set(p, j * 6 + 3))
         const idx = new Uint32Array((n - 1) * 6)
-        for (let i = 0; i + 1 < n; i++) idx.set([i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2], i * 6)
-        return toGeometry(pos, idx, true)
+        for (let j = 0; j + 1 < n; j++) idx.set([j * 2, j * 2 + 1, j * 2 + 2, j * 2 + 1, j * 2 + 3, j * 2 + 2], j * 6)
+        const geometry = toGeometry(pos, idx, true)
+        return { geometry, roll: rollData(u, fabrication.fab.pieces[i]), final: pos.slice() }
       }),
     [fabrication],
   )
-  useEffect(() => () => geoms.forEach((g) => g.dispose()), [geoms])
+  useEffect(() => () => pieces.forEach((p) => p.geometry.dispose()), [pieces])
+
+  // 再生中は、入口側の部品から順に平らな型紙が丸まっていく
+  const total = ROLL_TIME + ROLL_GAP * (pieces.length - 1) + 600
+  const [finishedAt, setFinishedAt] = useState<number | null>(null)
+  const playing = assembleAt !== null && finishedAt !== assembleAt
+  useEffect(() => {
+    if (assembleAt === null) return
+    const t = setTimeout(() => setFinishedAt(assembleAt), total)
+    return () => clearTimeout(t)
+  }, [assembleAt, total])
+  useFrame(() => {
+    if (!playing || assembleAt === null) return
+    const now = performance.now() - assembleAt - 400
+    pieces.forEach((p, i) => {
+      const attr = p.geometry.getAttribute('position') as THREE.BufferAttribute
+      const k = ease((now - i * ROLL_GAP) / ROLL_TIME)
+      if (k >= 1) attr.array.set(p.final)
+      else rolledPositions(p.roll, k, attr.array as Float32Array)
+      attr.needsUpdate = true
+      p.geometry.computeVertexNormals()
+      p.geometry.computeBoundingSphere()
+    })
+  })
+  useEffect(() => {
+    if (playing) return
+    for (const p of pieces) {
+      const attr = p.geometry.getAttribute('position') as THREE.BufferAttribute
+      attr.array.set(p.final)
+      attr.needsUpdate = true
+      p.geometry.computeVertexNormals()
+    }
+  }, [playing, pieces])
 
   // 展開図の両端（丸めたときの縦の合わせ目）は各切断線の先頭の点を結ぶ母線。表面に埋もれないよう少し外へ出す
   const seams = useMemo(
@@ -265,17 +304,14 @@ function FabPieces({ fabrication }: { fabrication: Fabrication }) {
 
   return (
     <>
-      {geoms.map((g, i) => (
-        <mesh key={i} geometry={g}>
+      {pieces.map((p, i) => (
+        <mesh key={i} geometry={p.geometry}>
           <meshStandardMaterial color={PIECE_COLORS[i % 2]} metalness={0.6} roughness={0.4} side={THREE.DoubleSide} />
         </mesh>
       ))}
-      {fabrication.unrolled.map((u, i) => (
-        <Line key={`e${i}`} points={u.edge1_3d as [number, number, number][]} color="#111827" lineWidth={1.5} />
-      ))}
-      {seams.map((pts, i) => (
-        <Line key={`s${i}`} points={pts as [number, number, number][]} color="#e00000" lineWidth={4} />
-      ))}
+      {!playing &&
+        fabrication.unrolled.map((u, i) => <Line key={`e${i}`} points={u.edge1_3d as [number, number, number][]} color="#111827" lineWidth={1.5} />)}
+      {!playing && seams.map((pts, i) => <Line key={`s${i}`} points={pts as [number, number, number][]} color="#e00000" lineWidth={4} />)}
     </>
   )
 }

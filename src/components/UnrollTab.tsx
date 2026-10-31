@@ -13,6 +13,7 @@ export function UnrollTab({ fabrication, view, onView }: { fabrication: Fabricat
   const settings = useDesignStore((s) => s.design.fabrication)
   const setFab = useDesignStore((s) => s.setFabrication)
   const setTab = useDesignStore((s) => s.setTab)
+  const playAssemble = useDesignStore((s) => s.playAssemble)
   if (!fabrication) return <p>寸法にエラーがあるため展開できません。</p>
   const { fab, mismatch, errors, warnings, minCount } = fabrication
   const maxMis = mismatch.length ? Math.max(...mismatch) : 0
@@ -25,6 +26,16 @@ export function UnrollTab({ fabrication, view, onView }: { fabrication: Fabricat
         </button>
         <button className={`btn ${view === '3d' ? 'on' : ''}`} onClick={() => onView('3d')}>
           3D で部品を表示
+        </button>
+        <button
+          className="btn"
+          disabled={!fabrication || fabrication.errors.length > 0}
+          onClick={() => {
+            onView('3d')
+            playAssemble()
+          }}
+        >
+          組み立てを再生
         </button>
       </div>
 
