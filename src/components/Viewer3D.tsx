@@ -41,7 +41,15 @@ const VIEW_VECTORS: Record<ViewDir, [number, number, number]> = {
 
 const frameAt = (frames: Frame[], c: Centerline, s: number) => frames[Math.min(Math.round(s / c.segmentLength), frames.length - 1)]
 
+/** 表示上の向き（入口を中心に z 軸 → x 軸の順に回す）。three.js の Euler 'XYZ' は z → y → x の順に効く */
+function orientEuler(o: { zDeg: number; xDeg: number }): THREE.Euler {
+  return new THREE.Euler(THREE.MathUtils.degToRad(o.xDeg), 0, THREE.MathUtils.degToRad(o.zDeg), 'XYZ')
+}
+
 export function Viewer3D({ profile, centerline, fabrication }: Props) {
+  const orient = useDesignStore((s) => s.design.orient)
+  const euler = useMemo(() => orientEuler(orient), [orient])
+  const worldPoints = useMemo(() => centerline.points.map((p) => new THREE.Vector3(...p).applyEuler(euler)), [centerline, euler])
   const fit = useDesignStore((s) => s.fit)
   const viewDir = useDesignStore((s) => s.viewDir)
 
@@ -69,10 +77,12 @@ export function Viewer3D({ profile, centerline, fabrication }: Props) {
         <StudioEnvironment />
         <ambientLight intensity={0.15} />
         <directionalLight position={[300, 800, 500]} intensity={1.2} />
-        <Chamber profile={profile} centerline={centerline} frames={frames} rings={rings} fabrication={fabrication} />
-        <Grid profile={profile} centerline={centerline} />
+        <group rotation={euler}>
+          <Chamber profile={profile} centerline={centerline} frames={frames} rings={rings} fabrication={fabrication} euler={euler} />
+        </group>
+        <Grid profile={profile} points={worldPoints} />
         <OrbitControls makeDefault enableDamping />
-        <FitCamera centerline={centerline} profile={profile} />
+        <FitCamera points={worldPoints} profile={profile} />
       </Canvas>
 
       <div className="absolute right-2 top-2 flex flex-wrap justify-end gap-1">
@@ -86,12 +96,12 @@ export function Viewer3D({ profile, centerline, fabrication }: Props) {
   )
 }
 
-function Grid({ profile, centerline }: { profile: Profile; centerline: Centerline }) {
+function Grid({ profile, points }: { profile: Profile; points: THREE.Vector3[] }) {
   const minY = useMemo(() => {
     let m = Infinity
-    for (const p of centerline.points) m = Math.min(m, p[1])
+    for (const p of points) m = Math.min(m, p.y)
     return m - profile.stations.reduce((acc, s) => Math.max(acc, s.outer), 0) / 2 - 20
-  }, [centerline, profile])
+  }, [points, profile])
   return <gridHelper args={[profile.length * 3, 60, '#3a404a', '#262a31']} position={[profile.length / 2, minY, 0]} />
 }
 
@@ -116,7 +126,7 @@ function toGeometry(pos: Float32Array, idx: Uint32Array, normals: boolean): THRE
   return g
 }
 
-function Chamber({ profile, centerline, frames, rings, fabrication }: Props & { frames: Frame[]; rings: Ring[] }) {
+function Chamber({ profile, centerline, frames, rings, fabrication, euler }: Props & { frames: Frame[]; rings: Ring[]; euler: THREE.Euler }) {
   const tab = useDesignStore((s) => s.tab)
   const draft = useDesignStore((s) => s.draft)
   const pickS = useDesignStore((s) => s.pickS)
@@ -139,7 +149,10 @@ function Chamber({ profile, centerline, frames, rings, fabrication }: Props & { 
   const onPick = (e: ThreeEvent<MouseEvent>) => {
     if (!picking) return
     e.stopPropagation()
-    pickS(nearestS(centerline, [e.point.x, e.point.y, e.point.z]))
+    // タップ位置は回転後の座標なので、逆回転してから中心軸上の位置を探す
+    const inv = new THREE.Quaternion().setFromEuler(euler).invert()
+    const p = e.point.clone().applyQuaternion(inv)
+    pickS(nearestS(centerline, [p.x, p.y, p.z]))
   }
   const showFab = tab === 'unroll' && fabrication && fabrication.errors.length === 0
 
@@ -266,22 +279,22 @@ function FabPieces({ fabrication }: { fabrication: Fabrication }) {
 }
 
 /** 全体が画面に収まるようカメラを合わせる。曲げのプレビュー中に視点が動かないよう、明示的な要求と画面サイズ変更時だけ動かす */
-function FitCamera({ centerline, profile }: { centerline: Centerline; profile: Profile }) {
+function FitCamera({ points, profile }: { points: THREE.Vector3[]; profile: Profile }) {
   const get = useThree((s) => s.get)
   const controls = useThree((s) => s.controls)
   const width = useThree((s) => s.size.width)
   const height = useThree((s) => s.size.height)
   const fitNonce = useDesignStore((s) => s.fitNonce)
   const viewDir = useDesignStore((s) => s.viewDir)
-  const cl = useRef(centerline)
+  const pts = useRef(points)
   useEffect(() => {
-    cl.current = centerline
-  }, [centerline])
+    pts.current = points
+  }, [points])
 
   useEffect(() => {
     const camera = get().camera as THREE.PerspectiveCamera
     const box = new THREE.Box3()
-    for (const p of cl.current.points) box.expandByPoint(new THREE.Vector3(...p))
+    for (const p of pts.current) box.expandByPoint(p)
     box.expandByScalar(profile.stations.reduce((m, s) => Math.max(m, s.outer), 0) / 2)
     const center = box.getCenter(new THREE.Vector3())
     const radius = box.getSize(new THREE.Vector3()).length() / 2

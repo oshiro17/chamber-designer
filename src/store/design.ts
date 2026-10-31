@@ -9,6 +9,8 @@ export interface Design {
   diameterKind: DiameterKind
   thickness: number
   bends: BendHandle[]
+  /** 表示上のチャンバー全体の向き [deg]。入口を中心に、奥行きの軸（z）→ 横の軸（x）の順に回す。形と寸法は変わらない */
+  orient: { zDeg: number; xDeg: number }
   fabrication: FabricationSettings
   print: PrintSettings
 }
@@ -25,6 +27,7 @@ export function defaultDesign(): Design {
     diameterKind: 'outer',
     thickness: 1,
     bends: [],
+    orient: { zDeg: 0, xDeg: 0 },
     fabrication: { mode: 'auto', maxAngleDeg: 12, count: 12, seam: 180, allowance: 0 },
     print: { orientation: 'landscape', margin: 10, overlap: 15 },
   }
@@ -33,6 +36,11 @@ export function defaultDesign(): Design {
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 /** 未入力（NaN）は JSON で null になるため NaN に戻す */
 const numOrBlank = (v: unknown): number | null => (v === null ? NaN : isNum(v) ? v : null)
+
+function orientOf(raw: unknown): Design['orient'] {
+  const o = (raw ?? {}) as Record<string, unknown>
+  return { zDeg: isNum(o.zDeg) ? o.zDeg : 0, xDeg: isNum(o.xDeg) ? o.xDeg : 0 }
+}
 
 /** 以前の保存データの溶接線（'inner' / 'outer'）は角度の初期値に置き換える */
 function fabricationOf(base: Design, raw: unknown): Design['fabrication'] {
@@ -67,6 +75,7 @@ export function parseDesign(raw: unknown): { ok: true; design: Design } | { ok: 
       diameterKind: d.diameterKind === 'inner' ? 'inner' : 'outer',
       thickness: isNum(d.thickness) ? d.thickness : base.thickness,
       bends,
+      orient: orientOf(d.orient),
       fabrication: fabricationOf(base, d.fabrication),
       print: { ...base.print, ...(d.print as object) },
     },

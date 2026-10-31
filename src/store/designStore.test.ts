@@ -122,6 +122,24 @@ describe('寸法ロック', () => {
   })
 })
 
+describe('全体の向き', () => {
+  it('曲げがあっても向きは変えられ、寸法と曲げはそのまま', () => {
+    bend(400, 0, 30, 200)
+    const before = S().design
+    S().setOrient({ zDeg: -35 })
+    S().setOrient({ xDeg: 10 })
+    expect(S().design.orient).toEqual({ zDeg: -35, xDeg: 10 })
+    expect(S().design.points).toBe(before.points)
+    expect(S().design.bends).toBe(before.bends)
+  })
+  it('向きのない以前の保存データは 0° として読み込む', () => {
+    const old = JSON.parse(JSON.stringify(defaultDesign()))
+    delete old.orient
+    const r = parseDesign(old)
+    expect(r.ok && r.design.orient).toEqual({ zDeg: 0, xDeg: 0 })
+  })
+})
+
 describe('保存データ', () => {
   it('自動保存したデータを読み戻せる', () => {
     bend(400, 45, 30, 200)
