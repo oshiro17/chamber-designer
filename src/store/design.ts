@@ -42,10 +42,10 @@ function orientOf(raw: unknown): Design['orient'] {
   return { zDeg: isNum(o.zDeg) ? o.zDeg : 0, xDeg: isNum(o.xDeg) ? o.xDeg : 0 }
 }
 
-/** 以前の保存データの溶接線（'inner' / 'outer'）は角度の初期値に置き換える */
+/** 以前の保存データの溶接線（'inner' / 'outer'）は角度の初期値に置き換え、溶接用の余白は設定をなくしたので 0 にする */
 function fabricationOf(base: Design, raw: unknown): Design['fabrication'] {
   const f = { ...base.fabrication, ...(raw as object) }
-  return { ...f, seam: isNum(f.seam) ? f.seam : base.fabrication.seam }
+  return { ...f, seam: isNum(f.seam) ? f.seam : base.fabrication.seam, allowance: 0 }
 }
 
 /** 保存データを読み込む。型が合わない項目があれば理由付きで失敗させる */

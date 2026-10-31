@@ -167,6 +167,11 @@ describe('保存データ', () => {
     const r = parseDesign(old)
     expect(r.ok && r.design.fabrication.seam).toBe(180)
   })
+  it('以前に保存した溶接用の余白は 0 として読み込む', () => {
+    const old = { ...JSON.parse(JSON.stringify(defaultDesign())), fabrication: { mode: 'auto', maxAngleDeg: 12, count: 12, seam: 90, allowance: 10 } }
+    const r = parseDesign(old)
+    expect(r.ok && r.design.fabrication.allowance).toBe(0)
+  })
   it('壊れたデータは理由付きで拒否する', () => {
     expect(parseDesign({ version: 1, points: [{ distance: 'x', diameter: 1 }, { distance: 1, diameter: 1 }] }).ok).toBe(false)
     expect(parseDesign({ version: 2 }).ok).toBe(false)

@@ -68,9 +68,6 @@ export function UnrollTab({ fabrication, view, onView }: { fabrication: Fabricat
             <NumberField value={settings.seam} onChange={(v) => Number.isFinite(v) && setFab({ seam: ((v % 360) + 360) % 360 })} className="w-16" label="溶接線の角度" />°
           </label>
         </div>
-        <label className="mt-2 flex items-center gap-1">
-          溶接用の余白 <NumberField value={settings.allowance} min={0} onChange={(v) => setFab({ allowance: Math.min(Math.max(v, 0), 20) })} className="w-16" label="余白" /> mm
-        </label>
       </fieldset>
 
       <fieldset className="group">
