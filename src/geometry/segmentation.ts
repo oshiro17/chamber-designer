@@ -4,7 +4,8 @@ import { diameterAt, type Station } from './profile'
 import { add, cross, distance, dot, length as vlen, normalize, rotateAround, scale, sub, type Vec3 } from './vec3'
 
 export interface SegmentationSettings {
-  mode: 'auto' | 'count'
+  /** stations = 入力した測定点の位置だけで切る（寸法の行ごとに 1 部品）、auto = 曲がりに応じて追加で切る、count = 部品数を指定 */
+  mode: 'stations' | 'auto' | 'count'
   /** 自動分割で隣り合う部品の軸がなす角の上限 [deg] */
   maxAngleDeg: number
   /** 分割数指定モードの部品数 */
@@ -65,6 +66,10 @@ export interface CutPlan {
  */
 export function planCuts(c: Centerline, stations: Station[], settings: SegmentationSettings): CutPlan {
   const breaks = taperBreaks(stations)
+  if (settings.mode === 'stations') {
+    const cuts = stations.map((st) => st.s).filter((s, i, a) => i === 0 || s - a[i - 1] > 1e-9)
+    return { cuts, minCount: breaks.length - 1 }
+  }
   const cum = turningProfile(c)
   const spans = breaks.slice(0, -1).map((s0, i) => {
     const s1 = breaks[i + 1]

@@ -167,6 +167,9 @@ describe('保存データ', () => {
     const r = parseDesign(old)
     expect(r.ok && r.design.fabrication.seam).toBe(180)
   })
+  it('新しい設計の展開図は、測定点の位置で切るのが初期値', () => {
+    expect(defaultDesign().fabrication.mode).toBe('stations')
+  })
   it('以前に保存した溶接用の余白は 0 として読み込む', () => {
     const old = { ...JSON.parse(JSON.stringify(defaultDesign())), fabrication: { mode: 'auto', maxAngleDeg: 12, count: 12, seam: 90, allowance: 10 } }
     const r = parseDesign(old)

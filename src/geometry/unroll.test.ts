@@ -165,6 +165,16 @@ describe('planCuts / buildPieces', () => {
     }
   })
 
+  it('「測定点の位置で切る」は、曲げがあっても入力した測定点の位置だけで切る', () => {
+    const { cuts } = planCuts(c, stations, { mode: 'stations', maxAngleDeg: 12, count: 0 })
+    expect(cuts).toEqual(stations.map((s) => s.s))
+    const fabr = computeFabrication(c, stations, { mode: 'stations', maxAngleDeg: 12, count: 0, seam: 180, allowance: 0 })
+    expect(fabr.unrolled).toHaveLength(stations.length - 1)
+    expect(fabr.fab.totalLength).toBeCloseTo(L, 9)
+    // 曲げの中を切らないので継ぎ目の折れ角が大きくなり、警告を出す
+    expect(fabr.warnings.some((w) => w.includes('折れ角'))).toBe(true)
+  })
+
   it('直線のチャンバーは測定点ごとの 7 部品になる', () => {
     const straight = buildBentCenterline(L, [])
     const { cuts } = planCuts(straight, stations, { mode: 'auto', maxAngleDeg: 10, count: 0 })

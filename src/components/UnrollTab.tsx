@@ -43,6 +43,9 @@ export function UnrollTab({ fabrication, view, onView }: { fabrication: Fabricat
         <legend>分割</legend>
         <div className="flex flex-col gap-2">
           <label className="flex items-center gap-1">
+            <input type="radio" checked={settings.mode === 'stations'} onChange={() => setFab({ mode: 'stations' })} /> 測定点の位置で切る（寸法の行ごとに 1 部品）
+          </label>
+          <label className="flex items-center gap-1">
             <input type="radio" checked={settings.mode === 'auto'} onChange={() => setFab({ mode: 'auto' })} /> 自動　継ぎ目の折れ角
             <NumberField value={settings.maxAngleDeg} min={1} disabled={settings.mode !== 'auto'} onChange={(v) => setFab({ maxAngleDeg: Math.min(Math.max(v, 1), 45) })} className="w-16" label="最大折れ角" />
             ° 以下

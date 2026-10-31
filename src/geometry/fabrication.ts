@@ -33,6 +33,11 @@ export function computeFabrication(c: Centerline, stations: Station[], settings:
     else errors.push(r.error)
     if (p.length < SHORT_PIECE) warnings.push(`部品 ${p.index + 1} の軸長が ${p.length.toFixed(1)}mm と短く、切断・溶接が難しい可能性があります`)
   }
+  if (settings.mode === 'stations' && fab.maxMiterDeg * 2 > settings.maxAngleDeg) {
+    warnings.push(
+      `継ぎ目の折れ角が最大 ${(fab.maxMiterDeg * 2).toFixed(1)}° あり、曲げ部分がカクカクになります。「自動」にすると曲げの中も細かく切って滑らかにできます`,
+    )
+  }
   const mismatch: number[] = []
   if (errors.length === 0) {
     for (let i = 0; i + 1 < fab.pieces.length; i++) {
