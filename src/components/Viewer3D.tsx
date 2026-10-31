@@ -10,6 +10,7 @@ import { diameterAt, type Profile, type Station } from '../geometry/profile'
 import { buildTubeMesh } from '../geometry/tubeMesh'
 import { add, distance, dot, normalize, scale, sub, type Vec3 } from '../geometry/vec3'
 import { useDesignStore, type ViewDir } from '../store/designStore'
+import { OrientControl } from './OrientControl'
 
 interface Props {
   profile: Profile
@@ -85,7 +86,8 @@ export function Viewer3D({ profile, centerline, fabrication }: Props) {
         <FitCamera points={worldPoints} profile={profile} />
       </Canvas>
 
-      <div className="absolute right-2 top-2 flex flex-wrap justify-end gap-1">
+      <div className="absolute left-2 right-2 top-2 flex flex-wrap items-center justify-end gap-1">
+        <OrientControl />
         {VIEWS.map((v) => (
           <button key={v.dir} className={`btn !min-h-8 !px-2 ${viewDir === v.dir ? 'on' : ''}`} onClick={() => fit(v.dir)}>
             {v.label}

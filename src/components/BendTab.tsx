@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { handleParams } from '../geometry/bend'
 import { WARN_RATIO } from '../geometry/shapeCheck'
 import { bendProblem, draftHandle, useDesignStore } from '../store/designStore'
@@ -174,8 +173,6 @@ export function BendTab() {
         )}
       </fieldset>
 
-      <OrientSection />
-
       <fieldset className="group">
         <legend>チェック</legend>
         <table>
@@ -204,33 +201,3 @@ export function BendTab() {
   )
 }
 
-/** チャンバー全体の向き。回す軸を選んでバーで角度を決める。形と寸法は変わらない */
-function OrientSection() {
-  const orient = useDesignStore((s) => s.design.orient)
-  const setOrient = useDesignStore((s) => s.setOrient)
-  const [axis, setAxis] = useState<'zDeg' | 'xDeg'>('zDeg')
-  const value = orient[axis]
-  const set = (v: number) => Number.isFinite(v) && setOrient({ [axis]: Math.max(-180, Math.min(180, v)) })
-
-  return (
-    <fieldset className="group">
-      <legend>全体の向き</legend>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <label className="flex items-center gap-1">
-          <input type="radio" checked={axis === 'zDeg'} onChange={() => setAxis('zDeg')} /> 奥行きの軸で回す（側面で傾ける）
-        </label>
-        <label className="flex items-center gap-1">
-          <input type="radio" checked={axis === 'xDeg'} onChange={() => setAxis('xDeg')} /> 横の軸で回す（手前・奥へ倒す）
-        </label>
-      </div>
-      <div className="mt-2 flex items-center gap-2">
-        <input type="range" min={-180} max={180} step={1} value={value} onChange={(e) => set(Number(e.target.value))} className="h-8 min-w-0 flex-1 accent-[#222]" aria-label="回転角度" />
-        <NumberField value={value} onChange={set} className="w-16" label="回転角度" />
-        <span>°</span>
-      </div>
-      <button className="btn mt-2" disabled={orient.zDeg === 0 && orient.xDeg === 0} onClick={() => setOrient({ zDeg: 0, xDeg: 0 })}>
-        向きを元に戻す
-      </button>
-    </fieldset>
-  )
-}
