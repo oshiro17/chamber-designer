@@ -9,7 +9,7 @@ import { parallelTransportFrames, type Frame } from '../geometry/frames'
 import { diameterAt, type Profile, type Station } from '../geometry/profile'
 import { buildTubeMesh } from '../geometry/tubeMesh'
 import { add, distance, dot, normalize, scale, sub, type Vec3 } from '../geometry/vec3'
-import { useDesignStore } from '../store/designStore'
+import { useDesignStore, type ViewDir } from '../store/designStore'
 
 interface Props {
   profile: Profile
@@ -22,10 +22,28 @@ interface Ring {
   st: Station
 }
 
+const VIEWS: { dir: ViewDir; label: string }[] = [
+  { dir: 'iso', label: '斜め' },
+  { dir: 'side', label: '横' },
+  { dir: 'back', label: '反対側' },
+  { dir: 'top', label: '上' },
+  { dir: 'front', label: '前' },
+]
+
+/** 視点ごとのカメラの向き（注視点から見たカメラの方向）。上から見るときは真上を少し外して画面の向きを安定させる */
+const VIEW_VECTORS: Record<ViewDir, [number, number, number]> = {
+  iso: [0.15, 0.35, 1],
+  side: [0, 0, 1],
+  back: [0, 0, -1],
+  top: [0, 1, 0.02],
+  front: [-1, 0.2, 0],
+}
+
 const frameAt = (frames: Frame[], c: Centerline, s: number) => frames[Math.min(Math.round(s / c.segmentLength), frames.length - 1)]
 
 export function Viewer3D({ profile, centerline, fabrication }: Props) {
   const fit = useDesignStore((s) => s.fit)
+  const viewDir = useDesignStore((s) => s.viewDir)
 
   const frames = useMemo(() => parallelTransportFrames(centerline.points), [centerline])
   const rings = useMemo<Ring[]>(
@@ -57,9 +75,13 @@ export function Viewer3D({ profile, centerline, fabrication }: Props) {
         <FitCamera centerline={centerline} profile={profile} />
       </Canvas>
 
-      <button className="btn absolute right-2 top-2" onClick={fit}>
-        全体表示
-      </button>
+      <div className="absolute right-2 top-2 flex flex-wrap justify-end gap-1">
+        {VIEWS.map((v) => (
+          <button key={v.dir} className={`btn !min-h-8 !px-2 ${viewDir === v.dir ? 'on' : ''}`} onClick={() => fit(v.dir)}>
+            {v.label}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -250,6 +272,7 @@ function FitCamera({ centerline, profile }: { centerline: Centerline; profile: P
   const width = useThree((s) => s.size.width)
   const height = useThree((s) => s.size.height)
   const fitNonce = useDesignStore((s) => s.fitNonce)
+  const viewDir = useDesignStore((s) => s.viewDir)
   const cl = useRef(centerline)
   useEffect(() => {
     cl.current = centerline
@@ -265,7 +288,7 @@ function FitCamera({ centerline, profile }: { centerline: Centerline; profile: P
     const vfov = THREE.MathUtils.degToRad(camera.fov)
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * (width / Math.max(height, 1)))
     const dist = Math.max(radius / Math.sin(Math.min(hfov, vfov) / 2), 100)
-    camera.position.copy(center.clone().add(new THREE.Vector3(0.15, 0.35, 1).normalize().multiplyScalar(dist)))
+    camera.position.copy(center.clone().add(new THREE.Vector3(...VIEW_VECTORS[viewDir]).normalize().multiplyScalar(dist)))
     camera.far = dist * 20
     camera.lookAt(center)
     camera.updateProjectionMatrix()
@@ -274,7 +297,7 @@ function FitCamera({ centerline, profile }: { centerline: Centerline; profile: P
       oc.target.copy(center)
       oc.update?.()
     }
-  }, [get, controls, width, height, fitNonce, profile.length, profile.stations])
+  }, [get, controls, width, height, fitNonce, viewDir, profile.length, profile.stations])
   return null
 }
 

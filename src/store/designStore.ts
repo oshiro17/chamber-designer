@@ -8,6 +8,9 @@ import { defaultDesign, newId, type Design } from './design'
 
 export type Tab = 'dimension' | 'bend' | 'unroll' | 'output'
 
+/** 3D の視点。横 = バイクの側面（手前側）から見た向き */
+export type ViewDir = 'iso' | 'side' | 'back' | 'top' | 'front'
+
 /** 曲げの入力手順。位置をタップ → 方向を決定 → 角度と半径を決定 */
 export type BendDraft =
   | { step: 'pick'; s: number | null }
@@ -19,6 +22,7 @@ interface State {
   tab: Tab
   draft: BendDraft | null
   fitNonce: number
+  viewDir: ViewDir
   message: string
 
   addPoint: () => void
@@ -44,7 +48,7 @@ interface State {
   setFabrication: (patch: Partial<FabricationSettings>) => void
   setPrint: (patch: Partial<PrintSettings>) => void
   setTab: (t: Tab) => void
-  fit: () => void
+  fit: (dir?: ViewDir) => void
   say: (text: string) => void
 }
 
@@ -82,6 +86,7 @@ export const useDesignStore = create<State>((set, get) => {
     tab: 'dimension',
     draft: null,
     fitNonce: 0,
+    viewDir: 'iso',
     message: '',
 
     addPoint: () => {
@@ -177,7 +182,7 @@ export const useDesignStore = create<State>((set, get) => {
     setFabrication: (patch) => edit((d) => ({ ...d, fabrication: { ...d.fabrication, ...patch } })),
     setPrint: (patch) => edit((d) => ({ ...d, print: { ...d.print, ...patch } })),
     setTab: (tab) => set({ tab, draft: null, message: '' }),
-    fit: () => set((st) => ({ fitNonce: st.fitNonce + 1 })),
+    fit: (dir) => set((st) => ({ fitNonce: st.fitNonce + 1, viewDir: dir ?? st.viewDir })),
     say: (message) => set({ message }),
   }
 })
