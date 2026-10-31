@@ -1,6 +1,6 @@
 import { Environment, Line, OrbitControls } from '@react-three/drei'
-import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
-import { useEffect, useMemo, useRef, type RefObject } from 'react'
+import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
+import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { pointAt, type Centerline } from '../geometry/centerline'
@@ -19,14 +19,12 @@ interface Props {
 
 interface Ring {
   pts: Vec3[]
-  top: Vec3
   st: Station
 }
 
 const frameAt = (frames: Frame[], c: Centerline, s: number) => frames[Math.min(Math.round(s / c.segmentLength), frames.length - 1)]
 
 export function Viewer3D({ profile, centerline, fabrication }: Props) {
-  const labelRefs = useRef<(HTMLDivElement | null)[]>([])
   const fit = useDesignStore((s) => s.fit)
 
   const frames = useMemo(() => parallelTransportFrames(centerline.points), [centerline])
@@ -41,7 +39,7 @@ export function Viewer3D({ profile, centerline, fabrication }: Props) {
           const a = (2 * Math.PI * k) / 64
           pts.push(add(c, add(scale(f.normal, r * Math.cos(a)), scale(f.binormal, r * Math.sin(a)))))
         }
-        return { pts, top: add(c, scale(f.normal, r + 8)), st }
+        return { pts, st }
       }),
     [centerline, frames, profile.stations],
   )
@@ -57,23 +55,8 @@ export function Viewer3D({ profile, centerline, fabrication }: Props) {
         <Grid profile={profile} centerline={centerline} />
         <OrbitControls makeDefault enableDamping />
         <FitCamera centerline={centerline} profile={profile} />
-        <LabelProjector anchors={rings.map((r) => r.top)} refs={labelRefs} />
       </Canvas>
 
-      <div className="pointer-events-none absolute inset-0">
-        {rings.map(({ st }, i) => (
-          <div
-            key={st.index}
-            ref={(el) => {
-              labelRefs.current[i] = el
-            }}
-            style={{ visibility: 'hidden', font: '11px/1.2 monospace' }}
-            className="absolute left-0 top-0 whitespace-nowrap rounded bg-white/85 px-1 text-black"
-          >
-            {st.index + 1}: ⌀{st.outer.toFixed(1)} s={st.s.toFixed(0)}
-          </div>
-        ))}
-      </div>
       <button className="btn absolute right-2 top-2" onClick={fit}>
         全体表示
       </button>
@@ -258,25 +241,6 @@ function FabPieces({ fabrication }: { fabrication: Fabrication }) {
       ))}
     </>
   )
-}
-
-/** drei の Html は React 19 で unmount 時に例外が出るため、DOM ラベルの位置を毎フレーム直接更新する */
-function LabelProjector({ anchors, refs }: { anchors: Vec3[]; refs: RefObject<(HTMLDivElement | null)[]> }) {
-  const v = useMemo(() => new THREE.Vector3(), [])
-  useFrame(({ camera, size }) => {
-    anchors.forEach((a, i) => {
-      const el = refs.current[i]
-      if (!el) return
-      v.set(a[0], a[1], a[2]).project(camera)
-      if (v.z > 1) {
-        el.style.visibility = 'hidden'
-        return
-      }
-      el.style.transform = `translate(-50%, -100%) translate(${((v.x + 1) / 2) * size.width}px, ${((1 - v.y) / 2) * size.height}px)`
-      el.style.visibility = 'visible'
-    })
-  })
-  return null
 }
 
 /** 全体が画面に収まるようカメラを合わせる。曲げのプレビュー中に視点が動かないよう、明示的な要求と画面サイズ変更時だけ動かす */
