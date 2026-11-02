@@ -35,6 +35,8 @@ export interface TextItem {
   size: number
   anchor: 'start' | 'middle' | 'end'
   layer: Layer
+  /** 文字の回転 [deg]。ページ座標（y 下向き）で正の値は時計回り。図形と一緒に回したときに付く */
+  angle?: number
 }
 
 export type DrawItem = LineItem | TextItem
@@ -242,14 +244,14 @@ interface Drawing {
   h: number
 }
 
-/** 図形を原点まわりに回して、左上が (0, 0) に来るよう平行移動する。文字は向きを変えず位置だけ回す */
+/** 図形を原点まわりに回して、左上が (0, 0) に来るよう平行移動する。文字も同じ角度だけ回すので、丸と番号などの位置関係は崩れない */
 export function rotateDrawing(d: Drawing, deg: number): Drawing {
   if (deg === 0) return d
   const a = (deg * Math.PI) / 180
   const c = Math.cos(a)
   const sn = Math.sin(a)
   const rot = ([x, y]: Pt): Pt => [x * c - y * sn, x * sn + y * c]
-  const items = d.items.map((it) => (it.kind === 'text' ? { ...it, ...xy(rot([it.x, it.y])) } : { ...it, pts: it.pts.map(rot) }))
+  const items = d.items.map((it) => (it.kind === 'text' ? { ...it, ...xy(rot([it.x, it.y])), angle: (it.angle ?? 0) + deg } : { ...it, pts: it.pts.map(rot) }))
   let minX = Infinity
   let minY = Infinity
   let maxX = -Infinity
@@ -286,12 +288,15 @@ interface Block extends Drawing {
 
 const MIN_PAD = 1
 
-/** n 枚に均等に分けたときの各ページの開始位置。1 枚なら中央にそろえる */
-function evenStarts(total: number, size: number, overlap: number): number[] {
-  if (total <= size) return [(total - size) / 2]
-  const n = Math.ceil((total - overlap) / (size - overlap))
-  const step = (total - size) / (n - 1)
-  return Array.from({ length: n }, (_, i) => i * step)
+/**
+ * 長さ total を n 等分し、各ページに載せる範囲 [a, b] を返す。隣のページとは overlap だけ重ねる。
+ * 1 ページに入るときは、用紙の中央に来るよう前後に空きを付ける
+ */
+function evenWindows(total: number, size: number, overlap: number): [number, number][] {
+  if (total <= size) return [[(total - size) / 2, (total + size) / 2]]
+  const n = Math.ceil(total / (size - overlap))
+  const seg = total / n
+  return Array.from({ length: n }, (_, i) => [i * seg - (i > 0 ? overlap / 2 : 0), (i + 1) * seg + (i < n - 1 ? overlap / 2 : 0)])
 }
 
 /**
@@ -338,7 +343,7 @@ export function layoutPages(drawings: Drawing[], s: PrintSettings): Page[] {
     let bestN = Infinity
     for (const ang of ANGLES) {
       const r = rotateDrawing(d0, ang)
-      const n = evenStarts(r.w + 2 * PAD, W, s.overlap).length * evenStarts(r.h + 2 * PAD, H, s.overlap).length
+      const n = evenWindows(r.w + 2 * PAD, W, s.overlap).length * evenWindows(r.h + 2 * PAD, H, s.overlap).length
       if (n < bestN) {
         best = r
         bestN = n
@@ -380,10 +385,9 @@ export function layoutPages(drawings: Drawing[], s: PrintSettings): Page[] {
   flushPage()
 
   for (const b of big) {
-    const totalW = b.w + 2 * PAD
-    const totalH = b.h + 2 * PAD
-    const xs = evenStarts(totalW, W, s.overlap)
-    const ys = evenStarts(totalH, H, s.overlap)
+    const ov = s.overlap
+    const xs = evenWindows(b.w + 2 * PAD, W, ov)
+    const ys = evenWindows(b.h + 2 * PAD, H, ov)
     const cols = xs.length
     const rows = ys.length
     const shifted = translate(b.items, PAD, PAD)
@@ -392,36 +396,37 @@ export function layoutPages(drawings: Drawing[], s: PrintSettings): Page[] {
       reg.push({ kind: 'line', pts: [[cx - 4, cy], [cx + 4, cy]], width: 0.2, layer: 'frame' })
       reg.push({ kind: 'line', pts: [[cx, cy - 4], [cx, cy + 4]], width: 0.2, layer: 'frame' })
     }
-    // 重なり部分の中央に、両側のページに同じ位置で印刷される合わせマークを置く
+    // 重なり部分の中央（ページの境目）に、両側のページに同じ位置で印刷される合わせマークを置く
     for (let c = 1; c < cols; c++) {
-      const cx = (xs[c] + xs[c - 1] + W) / 2
-      for (const oy of ys) {
-        cross(cx, oy + H * 0.25)
-        cross(cx, oy + H * 0.75)
+      const cx = (xs[c][0] + xs[c - 1][1]) / 2
+      for (const [y0, y1] of ys) {
+        cross(cx, y0 + (y1 - y0) * 0.25)
+        cross(cx, y0 + (y1 - y0) * 0.75)
       }
     }
     for (let r = 1; r < rows; r++) {
-      const cy = (ys[r] + ys[r - 1] + H) / 2
-      for (const ox of xs) {
-        cross(ox + W * 0.25, cy)
-        cross(ox + W * 0.75, cy)
+      const cy = (ys[r][0] + ys[r - 1][1]) / 2
+      for (const [x0, x1] of xs) {
+        cross(x0 + (x1 - x0) * 0.25, cy)
+        cross(x0 + (x1 - x0) * 0.75, cy)
       }
     }
     const all = [...shifted, ...reg]
-    const ovX = cols > 1 ? W - (xs[1] - xs[0]) : 0
-    const ovY = rows > 1 ? H - (ys[1] - ys[0]) : 0
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const x0 = xs[c]
-        const y0 = ys[r]
-        const items = translate(clipItems(all, x0, y0, x0 + W, y0 + H), m - x0, m - y0)
-        if (c > 0) items.push({ kind: 'line', pts: [[m + ovX, m], [m + ovX, m + H]], width: 0.15, dash: [2, 2], layer: 'frame' })
-        if (r > 0) items.push({ kind: 'line', pts: [[m, m + ovY], [m + W, m + ovY]], width: 0.15, dash: [2, 2], layer: 'frame' })
-        if (c > 0) items.push({ kind: 'text', x: m + 1, y: m + H / 2, text: `< R${r + 1}C${c}`, size: 3, anchor: 'start', layer: 'frame' })
-        if (c < cols - 1) items.push({ kind: 'text', x: m + W - 1, y: m + H / 2, text: `R${r + 1}C${c + 2} >`, size: 3, anchor: 'end', layer: 'frame' })
-        if (r > 0) items.push({ kind: 'text', x: m + W / 2, y: m + 4, text: `^ R${r}C${c + 1}`, size: 3, anchor: 'middle', layer: 'frame' })
-        if (r < rows - 1) items.push({ kind: 'text', x: m + W / 2, y: m + H - 1, text: `v R${r + 2}C${c + 1}`, size: 3, anchor: 'middle', layer: 'frame' })
-        const ov = Math.round(Math.max(ovX, ovY))
+        const [x0, x1] = xs[c]
+        const [y0, y1] = ys[r]
+        const pw = x1 - x0
+        const ph = y1 - y0
+        const items = translate(clipItems(all, x0, y0, x1, y1), m - x0, m - y0)
+        if (c > 0) items.push({ kind: 'line', pts: [[m + ov, m], [m + ov, m + ph]], width: 0.15, dash: [2, 2], layer: 'frame' })
+        if (r > 0) items.push({ kind: 'line', pts: [[m, m + ov], [m + pw, m + ov]], width: 0.15, dash: [2, 2], layer: 'frame' })
+        if (c > 0) items.push({ kind: 'text', x: m + 1, y: m + ph / 2, text: `< R${r + 1}C${c}`, size: 3, anchor: 'start', layer: 'frame' })
+        if (c < cols - 1) items.push({ kind: 'text', x: m + pw - 1, y: m + ph / 2, text: `R${r + 1}C${c + 2} >`, size: 3, anchor: 'end', layer: 'frame' })
+        if (r > 0) items.push({ kind: 'text', x: m + pw / 2, y: m + 4, text: `^ R${r}C${c + 1}`, size: 3, anchor: 'middle', layer: 'frame' })
+        if (r < rows - 1) items.push({ kind: 'text', x: m + pw / 2, y: m + ph - 1, text: `v R${r + 2}C${c + 1}`, size: 3, anchor: 'middle', layer: 'frame' })
+        // 分割したページは、どの部品の何枚目かを下の帯の中央に大きく書く
+        items.push({ kind: 'text', x: width / 2, y: height - m - 5, text: `PART ${b.piece + 1}   ${r * cols + c + 1} / ${rows * cols}`, size: 6, anchor: 'middle', layer: 'info' })
         pages.push({ items, title: `PART ${b.piece + 1}  tile R${r + 1}C${c + 1} (${rows}x${cols}, overlap ${ov}mm)` })
       }
     }

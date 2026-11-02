@@ -14,7 +14,8 @@ const num = (v: number) => (Math.round(v * 1000) / 1000).toString()
 function itemSvg(it: DrawItem): string {
   const color = COLORS[it.layer]
   if (it.kind === 'text') {
-    return `<text x="${num(it.x)}" y="${num(it.y)}" font-size="${num(it.size)}" text-anchor="${it.anchor}" fill="${color}" font-family="Helvetica, Arial, sans-serif">${esc(it.text)}</text>`
+    const rot = it.angle ? ` transform="rotate(${num(it.angle)} ${num(it.x)} ${num(it.y)})"` : ''
+    return `<text x="${num(it.x)}" y="${num(it.y)}"${rot} font-size="${num(it.size)}" text-anchor="${it.anchor}" fill="${color}" font-family="Helvetica, Arial, sans-serif">${esc(it.text)}</text>`
   }
   const d = it.pts.map((p, i) => `${i ? 'L' : 'M'}${num(p[0])} ${num(p[1])}`).join(' ') + (it.closed ? ' Z' : '')
   const dash = it.dash ? ` stroke-dasharray="${it.dash.join(' ')}"` : ''

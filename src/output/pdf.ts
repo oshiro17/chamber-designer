@@ -1,4 +1,4 @@
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
+import { degrees, PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 import { mmToPt, type Page } from './layout'
 
 const COLORS = {
@@ -29,7 +29,9 @@ export async function pagesToPdf(pages: Page[]): Promise<Uint8Array> {
         const text = pdfSafe(it.text)
         const w = font.widthOfTextAtSize(text, size)
         const dx = it.anchor === 'middle' ? -w / 2 : it.anchor === 'end' ? -w : 0
-        page.drawText(text, { x: X(it.x) + dx, y: Y(it.y), size, font, color })
+        // ページ座標の時計回りは、y が上向きの PDF では反時計回りの逆向きになる。中央・右寄せのずらしも文字の向きに沿わせる
+        const a = (-(it.angle ?? 0) * Math.PI) / 180
+        page.drawText(text, { x: X(it.x) + dx * Math.cos(a), y: Y(it.y) + dx * Math.sin(a), size, font, color, rotate: degrees((a * 180) / Math.PI) })
         continue
       }
       const pts = it.closed ? [...it.pts, it.pts[0]] : it.pts

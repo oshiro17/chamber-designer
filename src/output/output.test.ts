@@ -133,10 +133,43 @@ describe('A3 への入れ方', () => {
     expect(pages[0].title).not.toContain('tile')
   })
 
+  it('回転しても丸と番号の位置関係は崩れず、文字も同じ角度だけ回る', () => {
+    const d = draw(cone({}))
+    const center = (dd: typeof d) => {
+      const circle = dd.items.find((it): it is LineItem => it.kind === 'line' && !!it.closed && it.layer === 'info')!
+      const cx = circle.pts.reduce((a, p) => a + p[0], 0) / circle.pts.length
+      const cy = circle.pts.reduce((a, p) => a + p[1], 0) / circle.pts.length
+      const num = dd.items.find((it) => it.kind === 'text' && it.text === '1')!
+      return { gap: num.kind === 'text' ? Math.hypot(num.x - cx, num.y - cy) : NaN, angle: num.kind === 'text' ? num.angle ?? 0 : NaN }
+    }
+    const before = center(d)
+    const after = center(rotateDrawing(d, 150))
+    expect(after.gap).toBeCloseTo(before.gap, 6)
+    expect(after.angle).toBe(150)
+  })
+
+  it('回転した文字を含む PDF も作れる', async () => {
+    const pages = layoutPages([rotateDrawing(draw(cone({})), 37)], land)
+    const doc = await PDFDocument.load(await pagesToPdf(pages))
+    expect(doc.getPageCount()).toBe(pages.length)
+  })
+
   it('回転しても切断線の長さは変わらない', () => {
     const d = draw(cone({}))
     const r = rotateDrawing(d, 37)
     expect(segLen(r.items)).toBeCloseTo(segLen(d.items), 6)
+  })
+
+  it('少しだけはみ出す部品も半分ずつに分け、ほぼ同じ内容のページが 2 枚にならない', () => {
+    // 円周 405mm・長さ 300mm の円柱。縦横どちらの A3 にも入らない
+    const r = 405 / (2 * Math.PI)
+    const d = draw(cone({ r0: r, r1: r, length: 300, s1: 300, d0Outer: 2 * r + 1, d1Outer: 2 * r + 1 }))
+    const pages = layoutPages([d], land)
+    expect(pages).toHaveLength(2)
+    const lens = pages.map((p) => segLen(p.items))
+    expect(Math.min(...lens) / Math.max(...lens)).toBeGreaterThan(0.8)
+    expect(lens[0] + lens[1]).toBeLessThan(segLen(d.items) * 1.3)
+    expect(lens[0] + lens[1]).toBeGreaterThanOrEqual(segLen(d.items) - 1e-6)
   })
 
   it('入らない部品は均等に分け、端だけが別ページに切れることはない', () => {
