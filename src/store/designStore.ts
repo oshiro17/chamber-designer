@@ -48,6 +48,7 @@ interface State {
   removeAllBends: () => void
 
   setOrient: (patch: Partial<Design['orient']>) => void
+  setName: (name: string) => void
   setFabrication: (patch: Partial<FabricationSettings>) => void
   setPrint: (patch: Partial<PrintSettings>) => void
   setTab: (t: Tab) => void
@@ -192,6 +193,7 @@ export const useDesignStore = create<State>((set, get) => {
     removeBend: (id) => edit((d) => ({ ...d, bends: d.bends.filter((h) => h.id !== id) })),
     removeAllBends: () => edit((d) => ({ ...d, bends: [] })),
 
+    setName: (name) => edit((d) => ({ ...d, name })),
     setOrient: (patch) => edit((d) => ({ ...d, orient: { ...d.orient, ...patch } })),
     setFabrication: (patch) => edit((d) => ({ ...d, fabrication: { ...d.fabrication, ...patch } })),
     setPrint: (patch) => edit((d) => ({ ...d, print: { ...d.print, ...patch } })),

@@ -5,9 +5,10 @@ import { useDesignStore } from '../store/designStore'
 
 export function usePages(fabrication: Fabrication | null): Page[] {
   const print = useDesignStore((s) => s.design.print)
+  const name = useDesignStore((s) => s.design.name)
   return useMemo(() => {
     if (!fabrication || fabrication.errors.length > 0) return []
-    const drawings = fabrication.unrolled.map((u, i) => pieceDrawing(u, fabrication.fab.pieces[i], fabrication.unrolled.length))
+    const drawings = fabrication.unrolled.map((u, i) => pieceDrawing(u, fabrication.fab.pieces[i], fabrication.unrolled.length, name))
     return layoutPages(drawings, print)
-  }, [fabrication, print])
+  }, [fabrication, print, name])
 }

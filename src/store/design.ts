@@ -5,6 +5,8 @@ import type { PrintSettings } from '../output/layout'
 
 export interface Design {
   version: 1
+  /** チャンバーの名前（例: RZ421）。型紙の中央に印刷する */
+  name: string
   points: MeasurementPoint[]
   diameterKind: DiameterKind
   thickness: number
@@ -22,6 +24,7 @@ export const newId = (prefix = 'p'): string => `${prefix}${Date.now().toString(3
 export function defaultDesign(): Design {
   return {
     version: 1,
+    name: '',
     // 未入力は NaN。入口の 1 点だけから始める
     points: [{ id: newId(), distance: 0, diameter: NaN }],
     diameterKind: 'outer',
@@ -72,6 +75,7 @@ export function parseDesign(raw: unknown): { ok: true; design: Design } | { ok: 
     ok: true,
     design: {
       version: 1,
+      name: typeof d.name === 'string' ? d.name : '',
       points,
       diameterKind: d.diameterKind === 'inner' ? 'inner' : 'outer',
       thickness: isNum(d.thickness) ? d.thickness : base.thickness,

@@ -9,7 +9,7 @@ export function Library() {
   const { say, loadDesign } = useDesignStore.getState()
 
   const save = () => {
-    const name = window.prompt('保存する名前（例: KX125 純正）')?.trim()
+    const name = window.prompt('保存する名前（例: RZ421）', useDesignStore.getState().design.name)?.trim()
     if (!name) return
     if (listSaved().some((e) => e.name === name) && !window.confirm(`「${name}」は保存済みです。上書きしますか？`)) return
     try {

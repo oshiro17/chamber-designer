@@ -1,5 +1,6 @@
 import type { FabPiece } from '../geometry/segmentation'
 import type { Pt, UnrolledPiece } from '../geometry/unroll'
+import { dot, type Vec3 } from '../geometry/vec3'
 
 /** 1mm = 72/25.4 pt（PDF の 1pt = 1/72 inch） */
 export const MM_TO_PT = 72 / 25.4
@@ -52,7 +53,16 @@ const FOOTER = 16
 const PAD = 6
 
 /** 部品 1 つ分の図形。座標は mm、原点は左上、y は下向き（外側から見た向き） */
-export function pieceDrawing(u: UnrolledPiece, fab: FabPiece, count: number): { items: DrawItem[]; w: number; h: number } {
+/** 継ぎ目での管の折れ角 [deg]。切断面の法線は前後の軸の二等分なので、軸との角度の 2 倍になる */
+export function foldAngleDeg(dir: Vec3, n: Vec3): number {
+  return (2 * Math.acos(Math.min(1, Math.max(-1, dot(dir, n)))) * 180) / Math.PI
+}
+
+/**
+ * 部品 1 つ分の図形。座標は mm、原点は左上、y は下向き（外側から見た向き）。
+ * 中央にチャンバー名・エンジン側からの部品番号・次の部品との折れ角を、部品の大きさに合わせて重ならないように置く
+ */
+export function pieceDrawing(u: UnrolledPiece, fab: FabPiece, count: number, name = ''): { items: DrawItem[]; w: number; h: number } {
   const H = u.bbox.maxY
   const f = (p: Pt): Pt => [p[0], H - p[1]]
   const items: DrawItem[] = []
@@ -75,59 +85,71 @@ export function pieceDrawing(u: UnrolledPiece, fab: FabPiece, count: number): { 
   const cx = (mid0[0] + mid1[0]) / 2
   const cy = (mid0[1] + mid1[1]) / 2
   const no = fab.index + 1
-  const lines = [
-    `PART ${no} / ${count}`,
-    `L ${fab.length.toFixed(1)}  s ${fab.s0.toFixed(1)}-${fab.s1.toFixed(1)}`,
-    `OD ${fab.d0Outer.toFixed(1)} > ${fab.d1Outer.toFixed(1)}`,
-    `gen ${u.generatorMin.toFixed(1)}-${u.generatorMax.toFixed(1)}`,
-  ]
-  // 大きな丸数字（円 + 番号）を中央に置く。高さに余裕があれば寸法の文字を下に、なければ右に並べる
-  const band = mid0[1] - mid1[1]
-  const longest = Math.max(...lines.map((t) => t.length))
-  let r = Math.min(14, Math.max(5, band * 0.2))
-  let size = Math.min(3.2, Math.max(2.2, band / 12))
-  let ccx = cx
-  let ccy: number
-  let textX: number
-  let textTop: number
-  let anchor: TextItem['anchor']
-  let right: number
-  const stackH = 2 * r + 3 + lines.length * size * 1.35
-  if (stackH <= band * 0.85) {
-    const top = cy - stackH / 2
-    ccy = top + r
-    textX = cx
-    textTop = top + 2 * r + 3
-    anchor = 'middle'
-    right = cx + Math.max(r, longest * size * 0.28)
-  } else {
-    r = Math.min(14, Math.max(3, band * 0.4))
-    size = Math.min(size, (band * 0.85) / (lines.length * 1.35))
-    const totalW = 2 * r + 4 + longest * size * 0.56
-    ccx = cx - totalW / 2 + r
-    ccy = cy
-    textX = ccx + r + 4
-    textTop = cy - (lines.length * size * 1.35) / 2
-    anchor = 'start'
-    right = cx + totalW / 2
-  }
-  const circle: Pt[] = []
-  for (let i = 0; i < 48; i++) circle.push([ccx + r * Math.cos((2 * Math.PI * i) / 48), ccy + r * Math.sin((2 * Math.PI * i) / 48)])
-  items.push({ kind: 'line', pts: circle, closed: true, width: 0.6, layer: 'info' })
-  const numSize = r * (no >= 10 ? 1.0 : 1.3)
-  items.push({ kind: 'text', x: ccx, y: ccy + numSize * 0.36, text: String(no), size: numSize, anchor: 'middle', layer: 'info' })
-  lines.forEach((t, i) => {
-    items.push({ kind: 'text', x: textX, y: textTop + (i + 0.8) * size * 1.35, text: t, size, anchor, layer: 'info' })
-  })
-  // 流れ方向（排気側）を示す矢印。y が小さい方向が排気側
-  const ax = right + 6
-  const ay0 = cy + 6
-  const ay1 = cy - 6
-  items.push({ kind: 'line', pts: [[ax, ay0], [ax, ay1]], width: MARK_W, layer: 'info' })
-  items.push({ kind: 'line', pts: [[ax - 1.5, ay1 + 2.5], [ax, ay1], [ax + 1.5, ay1 + 2.5]], width: MARK_W, layer: 'info' })
-  items.push({ kind: 'text', x: ax, y: ay1 - 1.5, text: 'FLOW', size: 2.5, anchor: 'middle', layer: 'info' })
 
-  items.push({ kind: 'text', x: mid0[0], y: mid0[1] - 2, text: no === 1 ? 'J1 INLET' : `J${no} to PART ${no - 1}`, size: 2.6, anchor: 'middle', layer: 'info' })
+  // 中央の文字のまとまり。上下は切り口の文字と A〜D の印の分を空け、左右は短いほうの切り口の弦の長さに収める
+  const fold = foldAngleDeg(fab.dir, fab.n1)
+  const rows: { text: string; size: number; circle?: boolean }[] = []
+  if (name) rows.push({ text: name, size: 7 })
+  rows.push({ text: String(no), size: 16, circle: true })
+  if (no < count) rows.push({ text: `${fold.toFixed(1)}\u00b0 to PART ${no + 1}`, size: 5 })
+  rows.push({ text: `L ${fab.length.toFixed(1)}  OD ${fab.d0Outer.toFixed(1)}-${fab.d1Outer.toFixed(1)}`, size: 2.6 })
+  const rowH = (r: (typeof rows)[number]) => (r.circle ? r.size * 1.6 + 2 : r.size * 1.35)
+  const rowW = (r: (typeof rows)[number]) => (r.circle ? r.size * 1.6 : r.text.length * r.size * 0.58)
+  const chord = (e: Pt[]) => Math.hypot(e[n][0] - e[0][0], e[n][1] - e[0][1])
+  const band = mid0[1] - mid1[1]
+  const availH = Math.max(0, band - 2 * Math.min(7, band * 0.25))
+  const availW = Math.min(chord(u.edge0), chord(u.edge1), u.bbox.maxX) * 0.8
+  // 縦に積む並べ方と、背の低い部品向けに横一列に並べる並べ方のうち、大きく書けるほうを使う
+  const GAP = 4
+  const stackH = rows.reduce((a, r) => a + rowH(r), 0)
+  const stackW = Math.max(...rows.map(rowW))
+  const lineW = rows.reduce((a, r) => a + rowW(r), 0) + GAP * (rows.length - 1)
+  const lineH = Math.max(...rows.map(rowH))
+  const kStack = Math.min(1, availH / stackH, availW / stackW)
+  const kLine = Math.min(1, availH / lineH, availW / lineW)
+  const horizontal = kLine > kStack
+  const k = horizontal ? kLine : kStack
+  const maxW = horizontal ? lineW : stackW
+  const drawRow = (r: (typeof rows)[number], x: number, top: number, anchor: TextItem['anchor']) => {
+    const size = r.size * k
+    if (r.circle) {
+      const rad = (r.size * 1.6 * k) / 2
+      const ccx = anchor === 'start' ? x + rad : x
+      const ccy = top + rad + k
+      const circle: Pt[] = []
+      for (let i = 0; i < 48; i++) circle.push([ccx + rad * Math.cos((2 * Math.PI * i) / 48), ccy + rad * Math.sin((2 * Math.PI * i) / 48)])
+      items.push({ kind: 'line', pts: circle, closed: true, width: 0.6, layer: 'info' })
+      const ns = size * (r.text.length >= 2 ? 0.75 : 1)
+      items.push({ kind: 'text', x: ccx, y: ccy + ns * 0.36, text: r.text, size: ns, anchor: 'middle', layer: 'info' })
+    } else {
+      items.push({ kind: 'text', x, y: top + size * 1.05, text: r.text, size, anchor, layer: 'info' })
+    }
+  }
+  if (horizontal) {
+    let x = cx - (lineW * k) / 2
+    for (const r of rows) {
+      drawRow(r, x, cy - (rowH(r) * k) / 2, 'start')
+      x += (rowW(r) + GAP) * k
+    }
+  } else {
+    let y = cy - (stackH * k) / 2
+    for (const r of rows) {
+      drawRow(r, cx, y, 'middle')
+      y += rowH(r) * k
+    }
+  }
+
+  // 流れ方向（排気側）を示す矢印。y が小さい方向が排気側。中央の文字の右に入る場合だけ描く
+  const ax = cx + (maxW * k) / 2 + 6
+  if (ax + 3 < cx + availW / 2 + 6) {
+    const ay0 = cy + 6
+    const ay1 = cy - 6
+    items.push({ kind: 'line', pts: [[ax, ay0], [ax, ay1]], width: MARK_W, layer: 'info' })
+    items.push({ kind: 'line', pts: [[ax - 1.5, ay1 + 2.5], [ax, ay1], [ax + 1.5, ay1 + 2.5]], width: MARK_W, layer: 'info' })
+    items.push({ kind: 'text', x: ax, y: ay1 - 1.5, text: 'FLOW', size: 2.5, anchor: 'middle', layer: 'info' })
+  }
+
+  items.push({ kind: 'text', x: mid0[0], y: mid0[1] - 2, text: no === 1 ? 'J1 ENGINE' : `J${no} to PART ${no - 1}`, size: 2.6, anchor: 'middle', layer: 'info' })
   items.push({ kind: 'text', x: mid1[0], y: mid1[1] + 4.5, text: no === count ? `J${no + 1} OUTLET` : `J${no + 1} to PART ${no + 1}`, size: 2.6, anchor: 'middle', layer: 'info' })
 
   return { items, w: u.bbox.maxX, h: H }

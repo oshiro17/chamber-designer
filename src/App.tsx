@@ -55,8 +55,9 @@ export default function App() {
   return (
     <DerivedContext.Provider value={derived}>
       <div className="flex h-[var(--app-h,100dvh)] flex-col">
-        <div className="titlebar flex items-center justify-between">
-          <span>大城チャンバーデザイン</span>
+        <div className="titlebar flex items-center gap-2">
+          <span className="whitespace-nowrap">大城チャンバーデザイン</span>
+          <ChamberName />
           <Library />
         </div>
 
@@ -91,5 +92,24 @@ export default function App() {
         </div>
       </div>
     </DerivedContext.Provider>
+  )
+}
+
+/** チャンバーの名前。型紙の中央に印刷する。PDF の標準フォントは日本語を書けないので英数字を案内する */
+function ChamberName() {
+  const name = useDesignStore((s) => s.design.name)
+  const setName = useDesignStore((s) => s.setName)
+  const ascii = /^[\x20-\x7e]*$/.test(name)
+  return (
+    <label className="flex min-w-0 flex-1 items-center gap-1 font-normal">
+      <span className="whitespace-nowrap text-[13px]">名前</span>
+      <input
+        className={`field !min-h-8 w-full max-w-48 !text-[15px] ${ascii ? '' : 'warn'}`}
+        value={name}
+        placeholder="例: RZ421"
+        onChange={(e) => setName(e.target.value)}
+        title={ascii ? 'チャンバーの名前（型紙の中央に印刷されます）' : '型紙の PDF には英数字しか印刷できません（日本語は ? になります）'}
+      />
+    </label>
   )
 }

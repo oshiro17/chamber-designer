@@ -9,6 +9,9 @@ const COLORS = {
   info: rgb(0.11, 0.3, 0.85),
 }
 
+/** PDF の標準フォント（WinAnsi）で書けない文字（日本語など）は ? に置き換える */
+export const pdfSafe = (t: string): string => t.replace(/[^\x20-\x7e\u00b0]/g, '?')
+
 /** ページ座標（mm、左上原点、y 下向き）を PDF 座標（pt、左下原点、y 上向き）へ変換してPDFを作る */
 export async function pagesToPdf(pages: Page[]): Promise<Uint8Array> {
   const doc = await PDFDocument.create()
@@ -23,9 +26,10 @@ export async function pagesToPdf(pages: Page[]): Promise<Uint8Array> {
       const color = COLORS[it.layer]
       if (it.kind === 'text') {
         const size = mmToPt(it.size)
-        const w = font.widthOfTextAtSize(it.text, size)
+        const text = pdfSafe(it.text)
+        const w = font.widthOfTextAtSize(text, size)
         const dx = it.anchor === 'middle' ? -w / 2 : it.anchor === 'end' ? -w : 0
-        page.drawText(it.text, { x: X(it.x) + dx, y: Y(it.y), size, font, color })
+        page.drawText(text, { x: X(it.x) + dx, y: Y(it.y), size, font, color })
         continue
       }
       const pts = it.closed ? [...it.pts, it.pts[0]] : it.pts

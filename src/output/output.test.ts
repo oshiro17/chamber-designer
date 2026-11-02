@@ -6,8 +6,8 @@ import { computeProfile } from '../geometry/profile'
 import { SAMPLE_POINTS } from '../geometry/sample'
 import type { FabPiece } from '../geometry/segmentation'
 import { unrollPiece } from '../geometry/unroll'
-import { clipItems, layoutPages, mmToPt, pieceDrawing, rotateDrawing, type LineItem, type PrintSettings } from './layout'
-import { pagesToPdf } from './pdf'
+import { clipItems, foldAngleDeg, layoutPages, mmToPt, pieceDrawing, rotateDrawing, type LineItem, type PrintSettings } from './layout'
+import { pagesToPdf, pdfSafe } from './pdf'
 import { pageToSvg } from './svg'
 
 const prof = computeProfile(SAMPLE_POINTS.map((p, i) => ({ id: String(i), ...p })), { diameterKind: 'outer', thickness: 1 })
@@ -148,6 +148,44 @@ describe('A3 への入れ方', () => {
     const lens = pages.map((p) => segLen(p.items))
     expect(Math.min(...lens) / Math.max(...lens)).toBeGreaterThan(0.8)
     expect(lens[0] + lens[1]).toBeGreaterThanOrEqual(segLen(d.items) - 1e-6)
+  })
+})
+
+describe('型紙中央の表示', () => {
+  const named = fabr.unrolled.map((u, i) => pieceDrawing(u, fabr.fab.pieces[i], fabr.unrolled.length, 'RZ421'))
+
+  it('チャンバー名が全部品に入り、最後以外の部品には次の部品との折れ角が入る', () => {
+    named.forEach((d, i) => {
+      expect(d.items.some((it) => it.kind === 'text' && it.text === 'RZ421')).toBe(true)
+      const p = fabr.fab.pieces[i]
+      const label = `${foldAngleDeg(p.dir, p.n1).toFixed(1)}\u00b0 to PART ${i + 2}`
+      expect(d.items.some((it) => it.kind === 'text' && it.text === label)).toBe(i < fabr.unrolled.length - 1)
+    })
+  })
+
+  it('中央の文字どうしが重ならない', () => {
+    named.forEach((d) => {
+      const boxes = d.items
+        .filter((it): it is Extract<typeof it, { kind: 'text' }> => it.kind === 'text' && it.layer === 'info' && !it.text.startsWith('J'))
+        .map((t) => {
+          const w = t.text.length * t.size * 0.55
+          const x0 = t.anchor === 'middle' ? t.x - w / 2 : t.anchor === 'end' ? t.x - w : t.x
+          return { x0, x1: x0 + w, y0: t.y - t.size * 0.75, y1: t.y + t.size * 0.15, t: t.text }
+        })
+      // 丸の中の番号は丸と同じ位置なので、番号以外の文字どうしと、番号との重なりを調べる
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          const a = boxes[i]
+          const b = boxes[j]
+          const overlap = a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1
+          expect(overlap, `${a.t} と ${b.t}`).toBe(false)
+        }
+      }
+    })
+  })
+
+  it('PDF に書けない文字（日本語）は ? にする', () => {
+    expect(pdfSafe('RZ421 改 12.5\u00b0')).toBe('RZ421 ? 12.5\u00b0')
   })
 })
 

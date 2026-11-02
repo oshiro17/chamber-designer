@@ -2,20 +2,22 @@ import { useMemo } from 'react'
 import type { Fabrication } from '../geometry/fabrication'
 import { pieceDrawing } from '../output/layout'
 import { pageToSvg } from '../output/svg'
+import { useDesignStore } from '../store/designStore'
 
 /** 部品ごとの展開図を並べて表示する（画面用の縮小表示） */
 export function PatternView({ fabrication }: { fabrication: Fabrication | null }) {
+  const name = useDesignStore((s) => s.design.name)
   const svgs = useMemo(() => {
     if (!fabrication || fabrication.errors.length > 0) return []
     return fabrication.unrolled.map((u, i) => {
-      const d = pieceDrawing(u, fabrication.fab.pieces[i], fabrication.unrolled.length)
+      const d = pieceDrawing(u, fabrication.fab.pieces[i], fabrication.unrolled.length, name)
       const pad = 8
       const items = d.items.map((it) =>
         it.kind === 'text' ? { ...it, x: it.x + pad, y: it.y + pad } : { ...it, pts: it.pts.map(([x, y]) => [x + pad, y + pad] as [number, number]) },
       )
       return { w: d.w + 2 * pad, svg: pageToSvg({ index: i, width: d.w + 2 * pad, height: d.h + 2 * pad, items, title: '' }) }
     })
-  }, [fabrication])
+  }, [fabrication, name])
 
   if (!fabrication) return <Empty text="寸法にエラーがあるため展開できません" />
   if (fabrication.errors.length > 0) return <Empty text={`展開できない部品があります（${fabrication.errors[0]}）`} />
