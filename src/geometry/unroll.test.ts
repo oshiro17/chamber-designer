@@ -115,12 +115,12 @@ describe('planCuts / buildPieces', () => {
   const c = buildBentCenterline(L, handles)
 
   it('直径の折れ点では必ず切断する', () => {
-    const { cuts } = planCuts(c, stations, { mode: 'auto', maxAngleDeg: 10, count: 0 })
+    const { cuts } = planCuts(c, stations, { mode: 'stations', maxAngleDeg: 10, count: 0 })
     for (const b of taperBreaks(stations)) expect(cuts.some((s) => Math.abs(s - b) < 1e-9)).toBe(true)
   })
 
   it('自動分割では継ぎ目で隣り合う部品の軸の角度が指定角以下になる', () => {
-    const { cuts } = planCuts(c, stations, { mode: 'auto', maxAngleDeg: 10, count: 0 })
+    const { cuts } = planCuts(c, stations, { mode: 'stations', maxAngleDeg: 10, count: 0 })
     const fab = buildPieces(c, stations, cuts)
     for (let i = 1; i < fab.pieces.length; i++) {
       const a = fab.pieces[i - 1].dir
@@ -138,14 +138,14 @@ describe('planCuts / buildPieces', () => {
   })
 
   it('分割を細かくすると設計形状とのずれが小さくなる', () => {
-    const coarse = buildPieces(c, stations, planCuts(c, stations, { mode: 'auto', maxAngleDeg: 20, count: 0 }).cuts)
-    const fine = buildPieces(c, stations, planCuts(c, stations, { mode: 'auto', maxAngleDeg: 5, count: 0 }).cuts)
+    const coarse = buildPieces(c, stations, planCuts(c, stations, { mode: 'stations', maxAngleDeg: 20, count: 0 }).cuts)
+    const fine = buildPieces(c, stations, planCuts(c, stations, { mode: 'stations', maxAngleDeg: 5, count: 0 }).cuts)
     expect(fine.maxDeviation).toBeLessThan(coarse.maxDeviation)
   })
 
   it('同径の円柱部の継ぎ目は隣の部品とぴったり合う', () => {
     const cc = buildBentCenterline(L, [{ id: 'x', s: 690, width: 140, a: 0.8, b: 0 }])
-    const fab = buildPieces(cc, stations, planCuts(cc, stations, { mode: 'auto', maxAngleDeg: 10, count: 0 }).cuts)
+    const fab = buildPieces(cc, stations, planCuts(cc, stations, { mode: 'stations', maxAngleDeg: 10, count: 0 }).cuts)
     const cyl = fab.pieces.filter((p) => p.s0 >= 615 && p.s1 <= 765)
     expect(cyl.length).toBeGreaterThan(1)
     const a = ok(unrollPiece(cyl[0], { seam: 180, allowance: 0 }))
@@ -154,7 +154,7 @@ describe('planCuts / buildPieces', () => {
   })
 
   it('全部品で同じ角度にすると、溶接線が継ぎ目でつながって一本になる', () => {
-    const fabr = computeFabrication(c, stations, { mode: 'auto', maxAngleDeg: 10, count: 0, seam: 180, allowance: 0 })
+    const fabr = computeFabrication(c, stations, { mode: 'stations', maxAngleDeg: 10, count: 0, seam: 180, allowance: 0 })
     expect(fabr.errors).toEqual([])
     for (let i = 0; i + 1 < fabr.unrolled.length; i++) {
       const gap = distance(fabr.unrolled[i].edge1_3d[0], fabr.unrolled[i + 1].edge0_3d[0])
@@ -165,19 +165,19 @@ describe('planCuts / buildPieces', () => {
     }
   })
 
-  it('「測定点の位置で切る」は、曲げがあっても入力した測定点の位置だけで切る', () => {
+  it('測定点の位置では必ず切り、曲げの中は折れ角が上限以下になるよう追加で切る', () => {
     const { cuts } = planCuts(c, stations, { mode: 'stations', maxAngleDeg: 12, count: 0 })
-    expect(cuts).toEqual(stations.map((s) => s.s))
+    for (const st of stations) expect(cuts.some((s) => Math.abs(s - st.s) < 1e-9)).toBe(true)
+    expect(cuts.length).toBeGreaterThan(stations.length)
     const fabr = computeFabrication(c, stations, { mode: 'stations', maxAngleDeg: 12, count: 0, seam: 180, allowance: 0 })
-    expect(fabr.unrolled).toHaveLength(stations.length - 1)
+    expect(fabr.fab.maxMiterDeg * 2).toBeLessThanOrEqual(12 + 1e-6)
+    expect(fabr.warnings.some((w) => w.includes('折れ角'))).toBe(false)
     expect(fabr.fab.totalLength).toBeCloseTo(L, 9)
-    // 曲げの中を切らないので継ぎ目の折れ角が大きくなり、警告を出す
-    expect(fabr.warnings.some((w) => w.includes('折れ角'))).toBe(true)
   })
 
   it('直線のチャンバーは測定点ごとの 7 部品になる', () => {
     const straight = buildBentCenterline(L, [])
-    const { cuts } = planCuts(straight, stations, { mode: 'auto', maxAngleDeg: 10, count: 0 })
+    const { cuts } = planCuts(straight, stations, { mode: 'stations', maxAngleDeg: 10, count: 0 })
     expect(cuts).toEqual(stations.map((s) => s.s))
   })
 })

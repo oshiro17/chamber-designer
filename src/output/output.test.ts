@@ -14,7 +14,7 @@ const prof = computeProfile(SAMPLE_POINTS.map((p, i) => ({ id: String(i), ...p }
 if (!prof.ok) throw new Error()
 const { stations, length: L } = prof.profile
 const c = buildBentCenterline(L, [{ id: 'a', s: 690, width: 250, a: 0.9, b: 0.2 }])
-const fabr = computeFabrication(c, stations, { mode: 'auto', maxAngleDeg: 12, count: 0, seam: 180, allowance: 0 })
+const fabr = computeFabrication(c, stations, { mode: 'stations', maxAngleDeg: 12, count: 0, seam: 180, allowance: 0 })
 const drawings = fabr.unrolled.map((u, i) => pieceDrawing(u, fabr.fab.pieces[i], fabr.unrolled.length))
 const land: PrintSettings = { orientation: 'landscape', margin: 10, overlap: 15 }
 

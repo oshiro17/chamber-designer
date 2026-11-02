@@ -31,7 +31,7 @@ export function defaultDesign(): Design {
     thickness: 1,
     bends: [],
     orient: { zDeg: 0, xDeg: 0 },
-    fabrication: { mode: 'stations', maxAngleDeg: 12, count: 12, seam: 180, allowance: 0 },
+    fabrication: { mode: 'stations', maxAngleDeg: 8, count: 12, seam: 180, allowance: 0 },
     print: { orientation: 'landscape', margin: 10, overlap: 15 },
   }
 }
@@ -48,8 +48,11 @@ function orientOf(raw: unknown): Design['orient'] {
 /** 以前の保存データの溶接線（'inner' / 'outer'）は角度の初期値に置き換え、溶接用の余白は設定をなくしたので 0 にする */
 function fabricationOf(base: Design, raw: unknown): Design['fabrication'] {
   const f = { ...base.fabrication, ...(raw as object) }
-  const mode = ['stations', 'auto', 'count'].includes(f.mode) ? f.mode : base.fabrication.mode
-  return { ...f, mode, seam: isNum(f.seam) ? f.seam : base.fabrication.seam, allowance: 0 }
+  // 以前の「自動」は、測定点で切って曲げを細かく切る今の方式に含まれる
+  const mode = f.mode === 'count' ? 'count' : 'stations'
+  // 折れ角の上限が 20° を超えると曲げが大きくずれるので、初期値に戻す
+  const maxAngleDeg = isNum(f.maxAngleDeg) && f.maxAngleDeg <= 20 ? f.maxAngleDeg : base.fabrication.maxAngleDeg
+  return { ...f, mode, maxAngleDeg, seam: isNum(f.seam) ? f.seam : base.fabrication.seam, allowance: 0 }
 }
 
 /** 保存データを読み込む。型が合わない項目があれば理由付きで失敗させる */

@@ -4,9 +4,12 @@ import { diameterAt, type Station } from './profile'
 import { add, cross, distance, dot, length as vlen, normalize, rotateAround, scale, sub, type Vec3 } from './vec3'
 
 export interface SegmentationSettings {
-  /** stations = 入力した測定点の位置だけで切る（寸法の行ごとに 1 部品）、auto = 曲がりに応じて追加で切る、count = 部品数を指定 */
-  mode: 'stations' | 'auto' | 'count'
-  /** 自動分割で隣り合う部品の軸がなす角の上限 [deg] */
+  /**
+   * stations = 入力した測定点の位置で必ず切り、曲がっている区間は継ぎ目の折れ角が maxAngleDeg 以下になるまで細かく切る。
+   * count = 測定点で切ったうえで、部品の総数を指定する
+   */
+  mode: 'stations' | 'count'
+  /** 継ぎ目 1 か所で隣り合う部品の軸がなす角の上限 [deg] */
   maxAngleDeg: number
   /** 分割数指定モードの部品数 */
   count: number
@@ -61,15 +64,11 @@ export interface CutPlan {
 }
 
 /**
- * 切断位置を決める。直径の折れ点では必ず切り、その間は曲がり角が均等になるよう分ける。
- * 曲がりのない区間は 1 部品のまま。
+ * 切断位置を決める。入力した測定点の位置では必ず切り、その間は曲がり角が均等になるよう分ける。
+ * 曲がりのない区間は測定点の間で 1 部品のまま。
  */
 export function planCuts(c: Centerline, stations: Station[], settings: SegmentationSettings): CutPlan {
-  const breaks = taperBreaks(stations)
-  if (settings.mode === 'stations') {
-    const cuts = stations.map((st) => st.s).filter((s, i, a) => i === 0 || s - a[i - 1] > 1e-9)
-    return { cuts, minCount: breaks.length - 1 }
-  }
+  const breaks = stations.map((st) => st.s).filter((s, i, a) => i === 0 || s - a[i - 1] > 1e-9)
   const cum = turningProfile(c)
   const spans = breaks.slice(0, -1).map((s0, i) => {
     const s1 = breaks[i + 1]
@@ -91,7 +90,7 @@ export function planCuts(c: Centerline, stations: Station[], settings: Segmentat
     return { cuts, spanOf }
   }
 
-  if (settings.mode === 'auto') {
+  if (settings.mode !== 'count') {
     const maxA = (Math.max(settings.maxAngleDeg, 1) * Math.PI) / 180
     for (const sp of spans) sp.m = Math.max(1, Math.ceil(sp.turn / maxA - 1e-9))
     // 弦の向きは曲率が一様でない部品で中央の接線からずれるため、継ぎ目の角度で確かめながら分割を増やす
