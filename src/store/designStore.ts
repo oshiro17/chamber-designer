@@ -1,7 +1,7 @@
 import { create } from 'zustand'
-import { buildBentCenterline, handleFits, handleFromParams, isBent, type BendHandle } from '../geometry/bend'
+import { buildFoldedCenterline, foldAngle, foldedAxis, foldFromParams, isFolded, MAX_FOLD_DEG, type Fold, type FoldedAxis } from '../geometry/fold'
 import type { FabricationSettings } from '../geometry/fabrication'
-import { computeProfile, diameterAt, type DiameterKind, type MeasurementPoint } from '../geometry/profile'
+import { computeProfile, type DiameterKind, type MeasurementPoint, type Station } from '../geometry/profile'
 import { checkShape } from '../geometry/shapeCheck'
 import type { PrintSettings } from '../output/layout'
 import { defaultDesign, newId, type Design } from './design'
@@ -11,11 +11,11 @@ export type Tab = 'dimension' | 'bend' | 'unroll' | 'output'
 /** 3D の視点。横 = バイクの側面（手前側）から見た向き */
 export type ViewDir = 'iso' | 'side' | 'back' | 'top' | 'front'
 
-/** 曲げの入力手順。位置をタップ → 方向を決定 → 角度と半径を決定 */
+/** 曲げの入力手順。折る測定点を選ぶ → 方向を決定 → 角度を決定。index は測定点の番号（0 始まり） */
 export type BendDraft =
-  | { step: 'pick'; s: number | null }
-  | { step: 'dir'; s: number; phiDeg: number }
-  | { step: 'amount'; s: number; phiDeg: number; thetaDeg: number; radius: number }
+  | { step: 'pick'; index: number | null }
+  | { step: 'dir'; index: number; phiDeg: number }
+  | { step: 'amount'; index: number; phiDeg: number; thetaDeg: number }
 
 interface State {
   design: Design
@@ -37,11 +37,12 @@ interface State {
   loadDesign: (d: Design, name: string) => void
 
   startBend: () => void
+  pickPoint: (index: number) => void
   pickS: (s: number) => void
   confirmPick: () => void
   setPhi: (deg: number) => void
   confirmDir: () => void
-  setAmount: (patch: { thetaDeg?: number; radius?: number }) => void
+  setAmount: (patch: { thetaDeg?: number }) => void
   confirmAmount: () => void
   cancelBend: () => void
   removeBend: (id: string) => void
@@ -61,25 +62,38 @@ const LOCKED = '曲げがあるため寸法は変更できません。寸法を�
 
 const profileOf = (d: Design) => computeProfile(d.points, { diameterKind: d.diameterKind, thickness: d.thickness })
 
-export function draftHandle(draft: BendDraft | null): BendHandle | null {
+export function draftFold(d: Design, draft: BendDraft | null): Fold | null {
   if (!draft || draft.step !== 'amount') return null
-  return handleFromParams('draft', draft.s, draft.phiDeg, draft.thetaDeg, draft.radius)
+  return foldFromParams('draft', d.points[draft.index].id, draft.phiDeg, draft.thetaDeg)
 }
 
-/** 曲げを追加しても製作できる形状かを調べる。問題があれば理由を返す */
-export function bendProblem(d: Design, h: BendHandle): string | null {
+/** 測定点ごとの折れ。同じ測定点の折れは extra で置き換える */
+export function foldsByIndex(d: Design, extra: Fold | null = null): (Fold | undefined)[] {
+  const all = extra ? [...d.folds.filter((f) => f.pointId !== extra.pointId), extra] : d.folds
+  return d.points.map((p) => all.find((f) => f.pointId === p.id))
+}
+
+export function axisOf(d: Design, stations: Station[], extra: Fold | null = null): FoldedAxis {
+  return foldedAxis(stations, foldsByIndex(d, extra))
+}
+
+/** 先頭と末尾以外の測定点（折れる位置）の番号 */
+export const foldablePoints = (d: Design): number[] => d.points.map((_, i) => i).filter((i) => i > 0 && i < d.points.length - 1)
+
+/** 折れを加えても製作できる形状かを調べる。問題があれば理由を返す */
+export function bendProblem(d: Design, f: Fold): string | null {
   const pr = profileOf(d)
   if (!pr.ok) return '寸法にエラーがあります'
-  const L = pr.profile.length
-  if (!handleFits(h, L)) return '曲げる範囲がチャンバーの端からはみ出します。角度か半径を小さくしてください'
-  const chk = checkShape(buildBentCenterline(L, [...d.bends, h]), pr.profile.stations)
+  if (foldAngle(f) > (MAX_FOLD_DEG * Math.PI) / 180 + 1e-9) return `折れ角は ${MAX_FOLD_DEG}° までにしてください`
+  const stations = pr.profile.stations
+  const chk = checkShape(buildFoldedCenterline(stations, axisOf(d, stations, f)), stations)
   return chk.issues.find((i) => i.level === 'error')?.message ?? null
 }
 
 export const useDesignStore = create<State>((set, get) => {
   const edit = (fn: (d: Design) => Design) => set({ design: fn(get().design), message: '' })
   const locked = () => {
-    if (isBent(get().design.bends)) {
+    if (isFolded(get().design.folds)) {
       set({ message: LOCKED })
       return true
     }
@@ -99,8 +113,8 @@ export const useDesignStore = create<State>((set, get) => {
       if (locked()) return
       edit((d) => ({ ...d, points: [...d.points, { id: newId(), distance: NaN, diameter: NaN }] }))
     },
+    // 区間を二等分して測定点を足すだけなので、折れがあっても形と長さは変わらない
     insertAfter: (index) => {
-      if (locked()) return
       edit((d) => {
         const cur = d.points[index]
         const next = d.points[index + 1]
@@ -138,23 +152,24 @@ export const useDesignStore = create<State>((set, get) => {
     clearAll: () => set({ design: defaultDesign(), draft: null, message: 'すべてクリアしました' }),
     loadDesign: (design, name) => set({ design, draft: null, message: `「${name}」を開きました` }),
 
-    startBend: () => set({ draft: { step: 'pick', s: null }, message: '曲げたい位置の中心をタップしてください' }),
+    startBend: () => set({ draft: { step: 'pick', index: null }, message: '折る測定点を選んでください（3D をタップしても選べます）' }),
+    pickPoint: (index) => {
+      const { draft, design } = get()
+      if (draft?.step !== 'pick' || !foldablePoints(design).includes(index)) return
+      set({ draft: { step: 'pick', index }, message: `測定点 ${index + 1} を選びました。よければ［決定］` })
+    },
     pickS: (s) => {
-      const dr = get().draft
-      if (dr?.step !== 'pick') return
-      // 数値入力の未入力（NaN）は未選択に戻し、範囲外は入口〜出口に収める
-      if (!Number.isFinite(s)) {
-        set({ draft: { step: 'pick', s: null } })
-        return
-      }
-      const pr = profileOf(get().design)
-      const v = pr.ok ? Math.min(Math.max(s, 0), pr.profile.length) : s
-      set({ draft: { step: 'pick', s: v }, message: `位置 s = ${v.toFixed(0)}mm を選びました。よければ［決定］` })
+      const { design } = get()
+      const pr = profileOf(design)
+      const cand = foldablePoints(design)
+      if (!pr.ok || cand.length === 0) return
+      const best = cand.reduce((a, b) => (Math.abs(pr.profile.stations[b].s - s) < Math.abs(pr.profile.stations[a].s - s) ? b : a))
+      get().pickPoint(best)
     },
     confirmPick: () => {
       const dr = get().draft
-      if (dr?.step !== 'pick' || dr.s === null) return
-      set({ draft: { step: 'dir', s: dr.s, phiDeg: 0 }, message: '曲げる方向を決めてください（矢印の向きに曲がります）' })
+      if (dr?.step !== 'pick' || dr.index === null) return
+      set({ draft: { step: 'dir', index: dr.index, phiDeg: 0 }, message: '曲げる方向を決めてください（矢印の向きに曲がります）' })
     },
     setPhi: (phiDeg) => {
       const dr = get().draft
@@ -163,12 +178,7 @@ export const useDesignStore = create<State>((set, get) => {
     confirmDir: () => {
       const dr = get().draft
       if (dr?.step !== 'dir') return
-      const pr = profileOf(get().design)
-      const D = pr.ok ? diameterAt(pr.profile.stations, dr.s, 'outer') : 50
-      set({
-        draft: { step: 'amount', s: dr.s, phiDeg: dr.phiDeg, thetaDeg: 30, radius: Math.round(D * 1.5) },
-        message: '曲げる角度と半径を決めてください',
-      })
+      set({ draft: { step: 'amount', index: dr.index, phiDeg: dr.phiDeg, thetaDeg: 15 }, message: '曲げる角度を決めてください' })
     },
     setAmount: (patch) => {
       const dr = get().draft
@@ -176,22 +186,22 @@ export const useDesignStore = create<State>((set, get) => {
     },
     confirmAmount: () => {
       const { draft, design } = get()
-      const h = draftHandle(draft)
-      if (!h) return
-      const problem = bendProblem(design, h)
+      const f = draftFold(design, draft)
+      if (!f) return
+      const problem = bendProblem(design, f)
       if (problem) {
         set({ message: problem })
         return
       }
       set({
-        design: { ...design, bends: [...design.bends, { ...h, id: newId('b') }].sort((x, y) => x.s - y.s) },
+        design: { ...design, folds: [...design.folds.filter((x) => x.pointId !== f.pointId), { ...f, id: newId('f') }] },
         draft: null,
         message: '曲げを追加しました',
       })
     },
     cancelBend: () => set({ draft: null, message: '' }),
-    removeBend: (id) => edit((d) => ({ ...d, bends: d.bends.filter((h) => h.id !== id) })),
-    removeAllBends: () => edit((d) => ({ ...d, bends: [] })),
+    removeBend: (id) => edit((d) => ({ ...d, folds: d.folds.filter((f) => f.id !== id) })),
+    removeAllBends: () => edit((d) => ({ ...d, folds: [] })),
 
     setName: (name) => edit((d) => ({ ...d, name })),
     setOrient: (patch) => edit((d) => ({ ...d, orient: { ...d.orient, ...patch } })),

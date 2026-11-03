@@ -1,6 +1,6 @@
 import { PDFDocument } from 'pdf-lib'
 import { describe, expect, it } from 'vitest'
-import { buildBentCenterline } from '../geometry/bend'
+import { foldedAxis } from '../geometry/fold'
 import { computeFabrication } from '../geometry/fabrication'
 import { computeProfile } from '../geometry/profile'
 import { SAMPLE_POINTS } from '../geometry/sample'
@@ -13,8 +13,9 @@ import { pageToSvg } from './svg'
 const prof = computeProfile(SAMPLE_POINTS.map((p, i) => ({ id: String(i), ...p })), { diameterKind: 'outer', thickness: 1 })
 if (!prof.ok) throw new Error()
 const { stations, length: L } = prof.profile
-const c = buildBentCenterline(L, [{ id: 'a', s: 690, width: 250, a: 0.9, b: 0.2 }])
-const fabr = computeFabrication(c, stations, { mode: 'stations', maxAngleDeg: 12, count: 0, seam: 180, allowance: 0 })
+// 測定点 5（450mm）で上へ 25°、測定点 6（615mm）で手前へ 20° 折った形
+const axis = foldedAxis(stations, stations.map((_, i) => (i === 4 ? { a: 0.44, b: 0 } : i === 5 ? { a: 0, b: 0.35 } : undefined)))
+const fabr = computeFabrication(stations, axis, { seam: 180, allowance: 0 })
 const drawings = fabr.unrolled.map((u, i) => pieceDrawing(u, fabr.fab.pieces[i], fabr.unrolled.length))
 const land: PrintSettings = { orientation: 'landscape', margin: 10, overlap: 15 }
 
@@ -187,12 +188,14 @@ describe('A3 への入れ方', () => {
 describe('型紙中央の表示', () => {
   const named = fabr.unrolled.map((u, i) => pieceDrawing(u, fabr.fab.pieces[i], fabr.unrolled.length, 'RZ421'))
 
-  it('チャンバー名が全部品に入り、最後以外の部品には次の部品との折れ角が入る', () => {
+  it('チャンバー名が全部品に入り、折れる継ぎ目の手前の部品にだけ折れ角が入る', () => {
     named.forEach((d, i) => {
       expect(d.items.some((it) => it.kind === 'text' && it.text === 'RZ421')).toBe(true)
       const p = fabr.fab.pieces[i]
       const label = `${foldAngleDeg(p.dir, p.n1).toFixed(1)}\u00b0 to PART ${i + 2}`
-      expect(d.items.some((it) => it.kind === 'text' && it.text === label)).toBe(i < fabr.unrolled.length - 1)
+      const folded = foldAngleDeg(p.dir, p.n1) > 0.05
+      expect(d.items.some((it) => it.kind === 'text' && it.text === label)).toBe(folded)
+      expect(d.items.some((it) => it.kind === 'text' && it.text.includes('\u00b0 to PART'))).toBe(folded)
     })
   })
 

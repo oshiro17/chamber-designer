@@ -1,4 +1,4 @@
-import { isBent } from '../geometry/bend'
+import { isFolded } from '../geometry/fold'
 import { toStations } from '../geometry/profile'
 import { useDesignStore } from '../store/designStore'
 import { NumberField } from './NumberField'
@@ -7,7 +7,7 @@ export function DimensionTab() {
   const design = useDesignStore((s) => s.design)
   const { addPoint, insertAfter, updatePoint, removePoint, setDiameterKind, setThickness, clearAll } = useDesignStore.getState()
   const { points, diameterKind, thickness } = design
-  const locked = isBent(design.bends)
+  const locked = isFolded(design.folds)
   const stations = toStations(points, { diameterKind, thickness })
   const diameterBad = (d: number) => !(d > 0) || (diameterKind === 'outer' && d - 2 * thickness <= 0)
 
@@ -29,7 +29,7 @@ export function DimensionTab() {
         </div>
       </fieldset>
 
-      <fieldset className="group" disabled={locked}>
+      <fieldset className="group">
         <legend>測定点（単位 mm）</legend>
         <div className="sunken overflow-x-auto">
           <table className="grid">
@@ -56,6 +56,7 @@ export function DimensionTab() {
                         invalid={!(p.distance > 0)}
                         min={0}
                         className="w-full"
+                        disabled={locked}
                         label={`距離 ${i + 1}`}
                         autoFocus={i === points.length - 1 && Number.isNaN(p.distance)}
                       />
@@ -68,6 +69,7 @@ export function DimensionTab() {
                       invalid={diameterBad(p.diameter)}
                       min={0}
                       className="w-full"
+                      disabled={locked}
                       label={`直径 ${i + 1}`}
                       autoFocus={points.length === 1 && Number.isNaN(p.diameter)}
                     />
@@ -77,7 +79,7 @@ export function DimensionTab() {
                     <button className="btn !min-h-7 !px-2" title="この下に挿入（区間を二等分）" onClick={() => insertAfter(i)}>
                       挿入
                     </button>
-                    <button className="btn !min-h-7 !px-2" disabled={points.length <= 1} onClick={() => removePoint(i)}>
+                    <button className="btn !min-h-7 !px-2" disabled={locked || points.length <= 1} onClick={() => removePoint(i)}>
                       削除
                     </button>
                   </td>
@@ -87,7 +89,7 @@ export function DimensionTab() {
           </table>
         </div>
         <div className="mt-2 flex gap-2">
-          <button className="btn" onClick={addPoint}>
+          <button className="btn" disabled={locked} onClick={addPoint}>
             ＋ 測定点を追加
           </button>
           <button className="btn" onClick={() => window.confirm('寸法と曲げをすべて消去します。よろしいですか？') && clearAll()}>

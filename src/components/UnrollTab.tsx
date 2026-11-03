@@ -15,7 +15,7 @@ export function UnrollTab({ fabrication, view, onView }: { fabrication: Fabricat
   const setTab = useDesignStore((s) => s.setTab)
   const playAssemble = useDesignStore((s) => s.playAssemble)
   if (!fabrication) return <p>寸法にエラーがあるため展開できません。</p>
-  const { fab, mismatch, errors, warnings, minCount } = fabrication
+  const { fab, mismatch, errors, warnings } = fabrication
   const maxMis = mismatch.length ? Math.max(...mismatch) : 0
 
   return (
@@ -38,22 +38,6 @@ export function UnrollTab({ fabrication, view, onView }: { fabrication: Fabricat
           組み立てを再生
         </button>
       </div>
-
-      <fieldset className="group">
-        <legend>分割</legend>
-        <div className="flex flex-col gap-2">
-          <label className="flex flex-wrap items-center gap-1">
-            <input type="radio" checked={settings.mode === 'stations'} onChange={() => setFab({ mode: 'stations' })} /> 測定点で切り、曲げの中は折れ角
-            <NumberField value={settings.maxAngleDeg} min={1} disabled={settings.mode !== 'stations'} onChange={(v) => setFab({ maxAngleDeg: Math.min(Math.max(v, 1), 45) })} className="w-16" label="最大折れ角" />
-            ° 以下に細かく切る
-          </label>
-          <label className="flex items-center gap-1">
-            <input type="radio" checked={settings.mode === 'count'} onChange={() => setFab({ mode: 'count' })} /> 部品数を指定
-            <NumberField value={settings.count} min={minCount} disabled={settings.mode !== 'count'} onChange={(v) => setFab({ count: Math.max(minCount, Math.round(v)) })} className="w-16" label="部品数" />
-            個（最小 {minCount}）
-          </label>
-        </div>
-      </fieldset>
 
       <fieldset className="group">
         <legend>溶接</legend>

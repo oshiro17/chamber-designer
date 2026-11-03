@@ -93,7 +93,7 @@ export function pieceDrawing(u: UnrolledPiece, fab: FabPiece, count: number, nam
   const rows: { text: string; size: number; circle?: boolean }[] = []
   if (name) rows.push({ text: name, size: 7 })
   rows.push({ text: String(no), size: 16, circle: true })
-  if (no < count) rows.push({ text: `${fold.toFixed(1)}\u00b0 to PART ${no + 1}`, size: 5 })
+  if (no < count && fold > 0.05) rows.push({ text: `${fold.toFixed(1)}\u00b0 to PART ${no + 1}`, size: 5 })
   rows.push({ text: `L ${fab.length.toFixed(1)}  OD ${fab.d0Outer.toFixed(1)}-${fab.d1Outer.toFixed(1)}`, size: 2.6 })
   const rowH = (r: (typeof rows)[number]) => (r.circle ? r.size * 1.6 + 2 : r.size * 1.35)
   const rowW = (r: (typeof rows)[number]) => (r.circle ? r.size * 1.6 : r.text.length * r.size * 0.58)

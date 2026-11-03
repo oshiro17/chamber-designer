@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildBentCenterline } from './bend'
+import { foldedAxis } from './fold'
 import { computeFabrication } from './fabrication'
 import { computeProfile } from './profile'
 import { rollData, rolledPositions } from './rolling'
@@ -8,8 +8,9 @@ import { distance, dot, sub, type Vec3 } from './vec3'
 
 const pr = computeProfile(SAMPLE_POINTS.map((p, i) => ({ id: String(i), ...p })), { diameterKind: 'outer', thickness: 1 })
 if (!pr.ok) throw new Error()
-const c = buildBentCenterline(pr.profile.length, [{ id: 'a', s: 690, width: 250, a: 0.9, b: 0.3 }])
-const fabr = computeFabrication(c, pr.profile.stations, { mode: 'stations', maxAngleDeg: 12, count: 0, seam: 90, allowance: 0 })
+// 測定点 5（450mm）で上へ 25°、測定点 6（615mm）で手前へ 20° 折った形
+const axis = foldedAxis(pr.profile.stations, pr.profile.stations.map((_, i) => (i === 4 ? { a: 0.44, b: 0 } : i === 5 ? { a: 0, b: 0.35 } : undefined)))
+const fabr = computeFabrication(pr.profile.stations, axis, { seam: 90, allowance: 0 })
 
 const at = (a: Float32Array, j: number): Vec3 => [a[j], a[j + 1], a[j + 2]]
 

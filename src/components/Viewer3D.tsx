@@ -41,6 +41,9 @@ const VIEW_VECTORS: Record<ViewDir, [number, number, number]> = {
   front: [-1, 0.2, 0],
 }
 
+/** 測定点で折れるので、輪や矢印の向きは折れる手前の向きで決める */
+const beforeFold = (c: Centerline, s: number) => Math.max(0, s - 2 * c.segmentLength)
+
 const frameAt = (frames: Frame[], c: Centerline, s: number) => frames[Math.min(Math.round(s / c.segmentLength), frames.length - 1)]
 
 /** 表示上の向き（入口を中心に z 軸 → x 軸の順に回す）。three.js の Euler 'XYZ' は z → y → x の順に効く */
@@ -184,11 +187,13 @@ function Chamber({ profile, centerline, frames, rings, fabrication, euler }: Pro
         <Line key={st.index} points={pts as [number, number, number][]} color="#38bdf8" lineWidth={1.5} />
       ))}
 
-      {tab === 'bend' && draft?.step === 'pick' && draft.s !== null && <PickMarker centerline={centerline} frames={frames} profile={profile} s={draft.s} />}
+      {tab === 'bend' && draft?.step === 'pick' && draft.index !== null && (
+        <PickMarker centerline={centerline} frames={frames} profile={profile} s={profile.stations[draft.index]?.s ?? 0} />
+      )}
       {tab === 'bend' && draft && draft.step !== 'pick' && (
         <>
-          <PickMarker centerline={centerline} frames={frames} profile={profile} s={draft.s} />
-          <DirectionArrow centerline={centerline} frames={frames} profile={profile} s={draft.s} phiDeg={draft.phiDeg} />
+          <PickMarker centerline={centerline} frames={frames} profile={profile} s={profile.stations[draft.index]?.s ?? 0} />
+          <DirectionArrow centerline={centerline} frames={frames} profile={profile} s={profile.stations[draft.index]?.s ?? 0} phiDeg={draft.phiDeg} />
         </>
       )}
     </group>
@@ -197,7 +202,7 @@ function Chamber({ profile, centerline, frames, rings, fabrication, euler }: Pro
 
 function PickMarker({ centerline, frames, profile, s }: { centerline: Centerline; frames: Frame[]; profile: Profile; s: number }) {
   const c = pointAt(centerline, s)
-  const f = frameAt(frames, centerline, s)
+  const f = frameAt(frames, centerline, beforeFold(centerline, s))
   const r = diameterAt(profile.stations, s, 'outer') / 2 + 4
   const pts: Vec3[] = []
   for (let k = 0; k <= 64; k++) {
@@ -210,7 +215,7 @@ function PickMarker({ centerline, frames, profile, s }: { centerline: Centerline
 /** 曲げる方向を示す矢印。方向は位置 s での軸まわりの角度（0° = 上, 90° = 手前） */
 function DirectionArrow({ centerline, frames, profile, s, phiDeg }: { centerline: Centerline; frames: Frame[]; profile: Profile; s: number; phiDeg: number }) {
   const ph = (phiDeg * Math.PI) / 180
-  const f = frameAt(frames, centerline, s)
+  const f = frameAt(frames, centerline, beforeFold(centerline, s))
   const dir = add(scale(f.normal, Math.cos(ph)), scale(f.binormal, Math.sin(ph)))
   const origin = pointAt(centerline, s)
   const len = diameterAt(profile.stations, s, 'outer') / 2 + Math.max(150, profile.length * 0.2)

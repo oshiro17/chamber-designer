@@ -1,9 +1,9 @@
-import type { Centerline } from './centerline'
+import { buildFoldPieces, type FoldedAxis } from './fold'
 import type { Station } from './profile'
-import { buildPieces, planCuts, type FabResult, type SegmentationSettings } from './segmentation'
+import type { FabResult } from './segmentation'
 import { jointMismatch, unrollPiece, type UnrolledPiece } from './unroll'
 
-export interface FabricationSettings extends SegmentationSettings {
+export interface FabricationSettings {
   /** 溶接線の角度 [deg]（0 = 上, 90 = 手前, 180 = 下, 270 = 奥） */
   seam: number
   allowance: number
@@ -11,7 +11,6 @@ export interface FabricationSettings extends SegmentationSettings {
 
 export interface Fabrication {
   fab: FabResult
-  minCount: number
   unrolled: UnrolledPiece[]
   /** 継ぎ目 i（部品 i と i+1 の間）の切断線のずれ [mm] */
   mismatch: number[]
@@ -21,9 +20,9 @@ export interface Fabrication {
 
 export const SHORT_PIECE = 10
 
-export function computeFabrication(c: Centerline, stations: Station[], settings: FabricationSettings): Fabrication {
-  const { cuts, minCount } = planCuts(c, stations, settings)
-  const fab = buildPieces(c, stations, cuts)
+/** 測定点の間ごとに 1 部品を作って展開する。部品の数は必ず「測定点の数 − 1」 */
+export function computeFabrication(stations: Station[], axis: FoldedAxis, settings: FabricationSettings): Fabrication {
+  const fab = buildFoldPieces(stations, axis)
   const unrolled: UnrolledPiece[] = []
   const errors: string[] = []
   const warnings: string[] = []
@@ -33,14 +32,11 @@ export function computeFabrication(c: Centerline, stations: Station[], settings:
     else errors.push(r.error)
     if (p.length < SHORT_PIECE) warnings.push(`部品 ${p.index + 1} の軸長が ${p.length.toFixed(1)}mm と短く、切断・溶接が難しい可能性があります`)
   }
-  if (fab.maxMiterDeg * 2 > settings.maxAngleDeg + 0.05) {
-    warnings.push(`継ぎ目の折れ角が最大 ${(fab.maxMiterDeg * 2).toFixed(1)}° あります。部品数を増やすと曲げ部分が滑らかになります`)
-  }
   const mismatch: number[] = []
   if (errors.length === 0) {
     for (let i = 0; i + 1 < fab.pieces.length; i++) {
       mismatch.push(jointMismatch(unrolled[i], fab.pieces[i], unrolled[i + 1], fab.pieces[i + 1]))
     }
   }
-  return { fab, minCount, unrolled, mismatch, errors, warnings }
+  return { fab, unrolled, mismatch, errors, warnings }
 }
